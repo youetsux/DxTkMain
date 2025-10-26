@@ -43,8 +43,7 @@ void DeviceResources::CreateSwapChain()
     sd.OutputWindow = m_hWnd;
     sd.SampleDesc.Count = 1;
     sd.Windowed = TRUE;
-    sd.SwapEffect = DXGI_SWAP_EFFECT_DISCARD; // simple path for education
-
+    sd.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
     HRESULT hr = m_factory->CreateSwapChain(m_device.Get(), &sd, m_swapChain.GetAddressOf());
     assert(SUCCEEDED(hr));
     m_factory->MakeWindowAssociation(m_hWnd, DXGI_MWA_NO_ALT_ENTER);

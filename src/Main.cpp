@@ -15,16 +15,15 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
     wc.lpfnWndProc=WndProc;
     wc.hInstance=hInst;
     wc.hCursor=LoadCursor(nullptr, IDC_ARROW);
-    wc.lpszClassName=L"DX11_DXTK_Renderer";
+    wc.lpszClassName=L"DX11_DXTK_Renderer_Quad";
     RegisterClassExW(&wc);
 
     RECT rc{0,0,(LONG)gW,(LONG)gH}; AdjustWindowRect(&rc, WS_OVERLAPPEDWINDOW, FALSE);
-    HWND hwnd = CreateWindowW(wc.lpszClassName, L"DX11 + DirectXTK Granular Renderer",
+    HWND hwnd = CreateWindowW(wc.lpszClassName, L"DX11 + DXTK Quad (POSITION-only)",
                               WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT,
                               rc.right-rc.left, rc.bottom-rc.top,
                               nullptr,nullptr,hInst,nullptr);
 
-    // Initialize BEFORE showing (avoid early WM_SIZE)
     g_app.Initialize(hwnd, gW, gH);
     g_ready = true;
     ShowWindow(hwnd, SW_SHOWDEFAULT);

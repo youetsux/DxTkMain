@@ -21,27 +21,29 @@ namespace DX {
         void CreateWindowSizeDependentResources();
         void WindowSizeChanged(unsigned int width, unsigned int height);
         void Present();
+        // DeviceResources.h  の public: に追加
+        unsigned int Width()  const { return m_width; }
+        unsigned int Height() const { return m_height; }
 
-        // Getters
         ID3D11Device*            Dev()  const { return m_device.Get(); }
         ID3D11DeviceContext*     Ctx()  const { return m_context.Get(); }
         IDXGISwapChain*          Swap() const { return m_swapChain.Get(); }
         ID3D11RenderTargetView*  RTV()  const { return m_rtv.Get(); }
         ID3D11DepthStencilView*  DSV()  const { return m_dsv.Get(); }
-        unsigned int Width()  const { return m_width; }
-        unsigned int Height() const { return m_height; }
-    private:
-        void CreateSwapChain();
-        void CreateRenderTargets();
 
-        HWND m_hWnd{}; unsigned int m_width{}, m_height{};
-        DXGI_FORMAT m_bbFmt{}, m_dsFmt{}; unsigned int m_bbCount{};
-        Microsoft::WRL::ComPtr<ID3D11Device>        m_device;
-        Microsoft::WRL::ComPtr<ID3D11DeviceContext> m_context;
-        Microsoft::WRL::ComPtr<IDXGISwapChain>      m_swapChain;
-        Microsoft::WRL::ComPtr<ID3D11RenderTargetView> m_rtv;
-        Microsoft::WRL::ComPtr<ID3D11DepthStencilView> m_dsv;
-        Microsoft::WRL::ComPtr<ID3D11Texture2D>        m_depth;
-        Microsoft::WRL::ComPtr<IDXGIFactory>        m_factory;
+    private:
+        void CreateSwapChain(); 
+        void CreateRenderTargets();
+		HWND m_hWnd{}; // ウィンドウハンドル
+		unsigned int m_width{}, m_height{};  // ウィンドウサイズ
+		DXGI_FORMAT m_bbFmt{}, m_dsFmt{}; // バックバッファ・デプスフォーマット
+        unsigned int m_bbCount{}; // バックバッファ数
+		Microsoft::WRL::ComPtr<ID3D11Device>        m_device; // D3D11デバイス
+		Microsoft::WRL::ComPtr<ID3D11DeviceContext> m_context; // D3D11デバイスコンテキスト
+		Microsoft::WRL::ComPtr<IDXGISwapChain>      m_swapChain;// スワップチェイン
+		Microsoft::WRL::ComPtr<ID3D11RenderTargetView> m_rtv; // レンダーターゲットビュー
+		Microsoft::WRL::ComPtr<ID3D11DepthStencilView> m_dsv; // デプスステンシルビュー
+		Microsoft::WRL::ComPtr<ID3D11Texture2D>        m_depth; // デプステクスチャ
+		Microsoft::WRL::ComPtr<IDXGIFactory>        m_factory; // DXGIファクトリ
     };
 }

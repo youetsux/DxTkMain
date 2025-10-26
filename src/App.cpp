@@ -15,22 +15,14 @@ void App::OnResize(unsigned w, unsigned h)
 
 void App::Update()
 {
+    // TODO
 }
 
 void App::Render()
 {
     FrameScope frame(m_renderer);
-
-    // --- 3D draw via m_renderer.Dev()/Ctx() ---
-
-    // --- 2D ---
-    // if (auto sb = m_renderer.Sprite()) {
-    //     sb->Begin();
-    //     if (auto font = m_renderer.Font()) {
-    //         font->DrawString(sb, L"Hello DirectXTK", DirectX::XMFLOAT2{20,20});
-    //     }
-    //     sb->End();
-    // }
-
-    m_renderer.Present();
+    // drawing happens inside Renderer::EndFrame (Quad)
+    m_renderer.BeginFrame();  // クリア & VP/RTV/DSV
+    m_renderer.EndFrame();    // ★ ここで m_quad->Draw() が呼ばれる設計
+    m_renderer.Present();     // 表示
 }
