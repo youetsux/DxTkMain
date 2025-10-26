@@ -2,20 +2,29 @@
 #define NOMINMAX
 #include <windows.h>
 #include "App.h"
+#include "camera.h"
+
+using namespace DirectX;
 
 void App::Initialize(HWND hwnd, unsigned w, unsigned h)
 {
     m_renderer.Initialize(hwnd, w, h);
+    Camera::Initialize();
+    Camera::SetPerspective(XM_PIDIV4, float(w) / float(h));
+    Camera::SetPosition(XMVectorSet(0, 0, -3, 0));
+    Camera::SetTarget(XMVectorSet(0, 0, 0, 0));
 }
 
 void App::OnResize(unsigned w, unsigned h)
 {
     m_renderer.OnResize(w, h);
+    Camera::OnResize(w, h); // aspectçXêV
 }
 
 void App::Update()
 {
     // TODO
+    Camera::Update();
 }
 
 void App::Render()

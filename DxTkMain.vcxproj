@@ -129,6 +129,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\App.cpp" />
+    <ClCompile Include="src\Camera.cpp" />
     <ClCompile Include="src\DeviceResources.cpp" />
     <ClCompile Include="src\Main.cpp" />
     <ClCompile Include="src\Quad.cpp" />
@@ -136,6 +137,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\App.h" />
+    <ClInclude Include="src\Camera.h" />
     <ClInclude Include="src\DeviceResources.h" />
     <ClInclude Include="src\Quad.h" />
     <ClInclude Include="src\Renderer.h" />
