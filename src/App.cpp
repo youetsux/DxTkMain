@@ -2,7 +2,7 @@
 #define NOMINMAX
 #include <windows.h>
 #include <DirectXMath.h>
-
+#include "Dice.h"
 #include "App.h"
 
 using namespace DirectX;
@@ -27,11 +27,13 @@ void App::Initialize(HWND hwnd, unsigned w, unsigned h)
     Camera::SetPosition(XMVectorSet(0, 0, -3, 0));
     Camera::SetTarget(XMVectorSet(0, 0, 0, 0));
 
-    // 5) Quad 初期化（どちらでもOK）
-    //   A) 引数なし版：Quad::Initialize() 内で Gfx::Dev() を取得
-    // m_quad.Initialize();
-    //   B) 引数あり版：今の定義が device を要するならこちら
-    m_quad.Initialize();
+
+    //m_quad.LoadTexture(".\\Assets\\Dice.png");
+    //m_quad.Initialize();
+
+    m_dice.Initialize();
+    
+
 
     m_ready = true;
 }
@@ -63,14 +65,16 @@ void App::Render()
     m_renderer.BeginFrame();
 
     // WVP を App 側で合成して Quad に渡す（Quad がパイプラインをバインド）
-    XMMATRIX W = XMMatrixRotationZ(m_angle);
+    XMMATRIX Wy = XMMatrixRotationY(m_angle);
+    XMMATRIX Wx = XMMatrixRotationX(m_angle/3.0);
     XMMATRIX V = Camera::GetViewMatrix();
     XMMATRIX P = Camera::GetProjectionMatrix();
-    XMMATRIX WVP = W * V * P;
+    //XMMATRIX WVP = W * V * P;
 
-    // 引数なし版を採用しているなら：m_quad.Draw(WVP);
-    m_quad.Draw( WVP);
-
+    //// 引数なし版を採用しているなら：m_quad.Draw(WVP);
+    //m_quad.Draw( WVP);
+    m_dice.Draw(Wy*Wx*V*P);
+    
     m_renderer.EndFrame();
     m_renderer.Present();
 }

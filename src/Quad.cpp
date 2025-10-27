@@ -2,6 +2,7 @@
 #include "Gfx.h"
 #include "GfxState.h"
 #include <SimpleMath.h>
+#include <Effects.h>
 
 using namespace DirectX;
 using namespace DirectX::SimpleMath;
@@ -13,54 +14,54 @@ namespace {
 
 HRESULT Quad::Initialize()
 {
+  return Initialize(0.f, 0.f, 1.f, 1.f); 
+}
+
+HRESULT Quad::Initialize(float u0, float v0, float u1, float v1)
+{
     auto* device = Gfx::Dev();
     if (!device) return E_POINTER;
 
-    // 頂点 / インデックス（VertexPositionTexture）
-    VertexPositionTexture vertices[] = {
-        { Vector3(-0.5f,  0.5f, 0.f), Vector2(0.f, 0.f) },
-        { Vector3(0.5f,  0.5f, 0.f), Vector2(1.f, 0.f) },
-        { Vector3(0.5f, -0.5f, 0.f), Vector2(1.f, 1.f) },
-        { Vector3(-0.5f, -0.5f, 0.f), Vector2(0.f, 1.f) },
-    };
-    uint16_t indices[] = { 0,1,2, 0,2,3 };
-
-    D3D11_BUFFER_DESC vbDesc{};
-    vbDesc.Usage = D3D11_USAGE_DEFAULT;
-    vbDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-    vbDesc.ByteWidth = sizeof(vertices);
-    D3D11_SUBRESOURCE_DATA vbData{ vertices };
-    HRESULT hr = device->CreateBuffer(&vbDesc, &vbData, m_vb.GetAddressOf());
+    // IB（固定）
+    const uint16_t idx[6] = { 0,1,2, 0,2,3 };
+    D3D11_BUFFER_DESC ibd{};
+    ibd.Usage = D3D11_USAGE_DEFAULT;
+    ibd.BindFlags = D3D11_BIND_INDEX_BUFFER;
+    ibd.ByteWidth = sizeof(idx);
+    D3D11_SUBRESOURCE_DATA idata{ idx };
+    HRESULT hr = device->CreateBuffer(&ibd, &idata, m_ib.GetAddressOf());
     if (FAILED(hr)) return hr;
 
-    D3D11_BUFFER_DESC ibDesc{};
-    ibDesc.Usage = D3D11_USAGE_DEFAULT;
-    ibDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
-    ibDesc.ByteWidth = sizeof(indices);
-    D3D11_SUBRESOURCE_DATA ibData{ indices };
-    hr = device->CreateBuffer(&ibDesc, &ibData, m_ib.GetAddressOf());
+    // VB（UVは引数で決定）
+    hr = BuildVB(u0, v0, u1, v1);
     if (FAILED(hr)) return hr;
 
     // BasicEffect
-    m_effect = std::make_unique<BasicEffect>(device);
-    m_effect->SetTextureEnabled(true);
-    m_effect->SetLightingEnabled(false);
+    auto ef = std::make_shared<BasicEffect>(device);
+    ef->SetTextureEnabled(true);
+    ef->SetLightingEnabled(false);
+	m_effect = ef;
 
-    const void* bc = nullptr; size_t bcLen = 0;
-    m_effect->GetVertexShaderBytecode(&bc, &bcLen);
-	// 入力レイアウト
+    //std::shared_ptr<AlphaTestEffect> effect;
+    auto alpha = std::make_shared<DirectX::AlphaTestEffect>(Gfx::Dev());
+    alpha->SetReferenceAlpha(128);
+    alpha->SetAlphaFunction(D3D11_COMPARISON_GREATER);
+    
+
+
+
+    // InputLayout
+    const void* bc = nullptr; size_t len = 0;
+    m_effect->GetVertexShaderBytecode(&bc, &len);
     hr = device->CreateInputLayout(
         VertexPositionTexture::InputElements,
         VertexPositionTexture::InputElementCount,
-        bc, bcLen, m_inputLayout.GetAddressOf());
+        bc, len, m_inputLayout.GetAddressOf());
     if (FAILED(hr)) return hr;
 
-    // ★ CommonStates を Quad 内で生成
+    // States
     m_states = std::make_unique<CommonStates>(device);
-
-    // テクスチャ
-    hr = m_texture.Load(kTexturePath);
-    return hr;
+    return S_OK;
 }
 
 void Quad::Draw(const XMMATRIX& wvp)
@@ -77,14 +78,20 @@ void Quad::Draw(const XMMATRIX& wvp)
     ctx->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
     // Effect 設定（W=I, V=I, P=WVP）
-    m_effect->SetWorld(XMMatrixIdentity());
-    m_effect->SetView(XMMatrixIdentity());
-    m_effect->SetProjection(wvp);
-    m_effect->SetTexture(m_texture.GetSRV());
-    m_effect->Apply(ctx);
+    // dynamic_pointer_cast を使う（安全・推奨）
+    std::shared_ptr<DirectX::BasicEffect> be = std::dynamic_pointer_cast<DirectX::BasicEffect>(m_effect);
+
+    be->SetWorld(XMMatrixIdentity());
+    be->SetView(XMMatrixIdentity());
+    be->SetProjection(wvp);
+    be->SetTexture(m_texture.GetSRV());
+    be->Apply(ctx);
+
+
 
     // ★ Quad 内の CommonStates を使用（半透明PNG想定）
-    Gfx::SetAlphaNonPremul(ctx, m_states.get());
+    //Gfx::SetAlphaNonPremul(ctx, m_states.get());
+    Gfx::SetAlphaNonPremulWriteZ(ctx, m_states.get());
     ID3D11SamplerState* samp = m_states->LinearWrap();
     ctx->PSSetSamplers(0, 1, &samp);
 
@@ -99,4 +106,31 @@ void Quad::Draw(const XMMATRIX& wvp)
     //ID3D11ShaderResourceView* nullSRV = nullptr;
     //ctx->PSSetShaderResources(0, 1, &nullSRV);
     Gfx::SetOpaque(ctx, m_states.get());
+}
+
+// UV指定版 VB 作成
+HRESULT Quad::BuildVB(float u0, float v0, float u1, float v1)
+{
+    auto* device = Gfx::Dev();
+    if (!device) return E_POINTER;
+
+    VertexPositionTexture v[4] = {
+        { Vector3(-0.5f,  0.5f, 0.f), Vector2(u0, v0) }, // 左上
+        { Vector3(0.5f,  0.5f, 0.f), Vector2(u1, v0) }, // 右上
+        { Vector3(0.5f, -0.5f, 0.f), Vector2(u1, v1) }, // 右下
+        { Vector3(-0.5f, -0.5f, 0.f), Vector2(u0, v1) }, // 左下
+    };
+
+    m_vb.Reset();
+    D3D11_BUFFER_DESC vbd{};
+    vbd.Usage = D3D11_USAGE_DEFAULT;
+    vbd.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+    vbd.ByteWidth = sizeof(v);
+    D3D11_SUBRESOURCE_DATA vdata{ v };
+    return device->CreateBuffer(&vbd, &vdata, m_vb.GetAddressOf());
+}
+
+HRESULT Quad::LoadTexture(const std::string& path)
+{
+    return m_texture.Load(path); // DXTK WIC ローダ（Texture.cppで実装済み）
 }

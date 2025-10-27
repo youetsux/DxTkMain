@@ -6,9 +6,10 @@
 
 #include "DeviceResources.h"   // DX::DeviceResources
 #include "Renderer.h"          // Begin/End/Present を持つ
-#include "Quad.h"              // Quad::Initialize/Draw
+//#include "Quad.h"              // Quad::Initialize/Draw
 #include "Camera.h"            // namespace Camera
-#include "Gfx.h"               // Gfx::Init/… アクセサ
+#include "Gfx.h"    
+#include "Dice.h"
 
 class App {
 public:
@@ -32,7 +33,8 @@ private:
     std::shared_ptr<DX::DeviceResources> m_dev;
 
     Renderer m_renderer;
-    Quad     m_quad;
+    //Quad     m_quad;
+	Dice    m_dice;
 
     bool m_ready = false;
 

@@ -33,4 +33,10 @@ namespace Gfx {
         ctx->RSSetState(s->CullNone());
     }
 
+    inline void SetAlphaNonPremulWriteZ(ID3D11DeviceContext* ctx, DirectX::CommonStates* s) {
+        ctx->OMSetBlendState(s->NonPremultiplied(), nullptr, 0xFFFFFFFF);
+        ctx->OMSetDepthStencilState(s->DepthDefault(), 0); // š Z‘‚«ž‚Ý‚ ‚è
+        ctx->RSSetState(s->CullNone());
+    }
+
 } // namespace Gfx
