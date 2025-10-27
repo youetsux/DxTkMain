@@ -10,6 +10,8 @@ LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
 
 int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
 {
+    HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+
     WNDCLASSEXW wc{}; wc.cbSize=sizeof(wc);
     wc.style=CS_HREDRAW|CS_VREDRAW|CS_OWNDC;
     wc.lpfnWndProc=WndProc;

@@ -7,6 +7,7 @@ void Renderer::Initialize()
 {
     // š App‚ªæ‚ÉGfx::Init()‚ğÏ‚Ü‚¹‚Ä‚¢‚é‘O’ñ
     m_states = std::make_unique<CommonStates>(Gfx::Dev());
+
 }
 
 void Renderer::OnResize(unsigned w, unsigned h)
