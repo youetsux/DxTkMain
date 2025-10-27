@@ -1,28 +1,14 @@
 #include "Quad.h"
 #include "Gfx.h"
-#include <d3dcompiler.h>
-#include <Windows.h> // MultiByteToWideChar 用
-#include <d3dcompiler.h>
-#pragma comment(lib, "d3dcompiler.lib")  // ← これを追加
+#include "GfxState.h"
+#include <SimpleMath.h>
 
 using namespace DirectX;
+using namespace DirectX::SimpleMath;
 using Microsoft::WRL::ComPtr;
 
-namespace
-{
-    struct QuadVtx { float x, y, z; float u, v; };
-    constexpr const char* kShaderPath = "assets/shaders/Quad.hlsl";
+namespace {
     constexpr const char* kTexturePath = ".\\Assets\\texture.png";
-}
-
-// UTF-8 → UTF-16 変換（Quad 内部用）
-static std::wstring ToWString(const std::string& s)
-{
-    if (s.empty()) return {};
-    int len = MultiByteToWideChar(CP_UTF8, 0, s.data(), (int)s.size(), nullptr, 0);
-    std::wstring w(len, L'\0');
-    MultiByteToWideChar(CP_UTF8, 0, s.data(), (int)s.size(), w.data(), len);
-    return w;
 }
 
 HRESULT Quad::Initialize()
@@ -30,105 +16,87 @@ HRESULT Quad::Initialize()
     auto* device = Gfx::Dev();
     if (!device) return E_POINTER;
 
-    QuadVtx vertices[] = {
-        { -0.5f,  0.5f, 0.f, 0.f, 0.f },
-        {  0.5f,  0.5f, 0.f, 1.f, 0.f },
-        {  0.5f, -0.5f, 0.f, 1.f, 1.f },
-        { -0.5f, -0.5f, 0.f, 0.f, 1.f },
+    // 頂点 / インデックス（VertexPositionTexture）
+    VertexPositionTexture vertices[] = {
+        { Vector3(-0.5f,  0.5f, 0.f), Vector2(0.f, 0.f) },
+        { Vector3(0.5f,  0.5f, 0.f), Vector2(1.f, 0.f) },
+        { Vector3(0.5f, -0.5f, 0.f), Vector2(1.f, 1.f) },
+        { Vector3(-0.5f, -0.5f, 0.f), Vector2(0.f, 1.f) },
     };
     uint16_t indices[] = { 0,1,2, 0,2,3 };
 
-	D3D11_BUFFER_DESC vbDesc{};// 頂点バッファ
+    D3D11_BUFFER_DESC vbDesc{};
+    vbDesc.Usage = D3D11_USAGE_DEFAULT;
     vbDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
     vbDesc.ByteWidth = sizeof(vertices);
-    vbDesc.Usage = D3D11_USAGE_DEFAULT;
     D3D11_SUBRESOURCE_DATA vbData{ vertices };
     HRESULT hr = device->CreateBuffer(&vbDesc, &vbData, m_vb.GetAddressOf());
     if (FAILED(hr)) return hr;
 
-	D3D11_BUFFER_DESC ibDesc{};// インデックスバッファ
+    D3D11_BUFFER_DESC ibDesc{};
+    ibDesc.Usage = D3D11_USAGE_DEFAULT;
     ibDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
     ibDesc.ByteWidth = sizeof(indices);
-    ibDesc.Usage = D3D11_USAGE_DEFAULT;
     D3D11_SUBRESOURCE_DATA ibData{ indices };
     hr = device->CreateBuffer(&ibDesc, &ibData, m_ib.GetAddressOf());
     if (FAILED(hr)) return hr;
 
-    // ---------- シェーダコンパイル ----------
-    std::wstring wShaderPath = ToWString(kShaderPath);
+    // BasicEffect
+    m_effect = std::make_unique<BasicEffect>(device);
+    m_effect->SetTextureEnabled(true);
+    m_effect->SetLightingEnabled(false);
 
-    ComPtr<ID3DBlob> vsBlob, psBlob, err;
-    hr = D3DCompileFromFile(wShaderPath.c_str(), nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE,
-        "VS", "vs_5_0", 0, 0, vsBlob.GetAddressOf(), err.GetAddressOf());
-    if (FAILED(hr)) { if (err) OutputDebugStringA((char*)err->GetBufferPointer()); return hr; }
-
-    hr = device->CreateVertexShader(vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(),
-        nullptr, m_vs.GetAddressOf());
+    const void* bc = nullptr; size_t bcLen = 0;
+    m_effect->GetVertexShaderBytecode(&bc, &bcLen);
+	// 入力レイアウト
+    hr = device->CreateInputLayout(
+        VertexPositionTexture::InputElements,
+        VertexPositionTexture::InputElementCount,
+        bc, bcLen, m_inputLayout.GetAddressOf());
     if (FAILED(hr)) return hr;
 
-    err.Reset();
-    hr = D3DCompileFromFile(wShaderPath.c_str(), nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE,
-        "PS", "ps_5_0", 0, 0, psBlob.GetAddressOf(), err.GetAddressOf());
-    if (FAILED(hr)) { if (err) OutputDebugStringA((char*)err->GetBufferPointer()); return hr; }
+    // ★ CommonStates を Quad 内で生成
+    m_states = std::make_unique<CommonStates>(device);
 
-    hr = device->CreatePixelShader(psBlob->GetBufferPointer(), psBlob->GetBufferSize(),
-        nullptr, m_ps.GetAddressOf());
-    if (FAILED(hr)) return hr;
-
-	// ---------- 入力レイアウト & 定数バッファ ----------
-    D3D11_INPUT_ELEMENT_DESC layout[] = {
-        { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-        { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, sizeof(float) * 3, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-    };
-    hr = device->CreateInputLayout(layout, _countof(layout),
-        vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(),
-        m_layout.GetAddressOf());
-    if (FAILED(hr)) return hr;
-
-	// 定数バッファ
-    D3D11_BUFFER_DESC cbd{};
-    cbd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
-    cbd.ByteWidth = sizeof(XMMATRIX);
-    cbd.Usage = D3D11_USAGE_DEFAULT;
-    hr = device->CreateBuffer(&cbd, nullptr, m_cbPerObject.GetAddressOf());
-    if (FAILED(hr)) return hr;
-
-    // ---------- テクスチャ読み込み ----------
+    // テクスチャ
     hr = m_texture.Load(kTexturePath);
     return hr;
 }
 
-void Quad::Draw(const DirectX::XMMATRIX& wvp)
+void Quad::Draw(const XMMATRIX& wvp)
 {
     auto* ctx = Gfx::Ctx();
     if (!ctx) return;
 
-    UINT stride = sizeof(QuadVtx), offset = 0;
+    // IA
+    UINT stride = sizeof(VertexPositionTexture), offset = 0;
     ID3D11Buffer* vb = m_vb.Get();
     ctx->IASetVertexBuffers(0, 1, &vb, &stride, &offset);
     ctx->IASetIndexBuffer(m_ib.Get(), DXGI_FORMAT_R16_UINT, 0);
-    ctx->IASetInputLayout(m_layout.Get());
+    ctx->IASetInputLayout(m_inputLayout.Get());
     ctx->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-    ctx->VSSetShader(m_vs.Get(), nullptr, 0);
-    ctx->PSSetShader(m_ps.Get(), nullptr, 0);
+    // Effect 設定（W=I, V=I, P=WVP）
+    m_effect->SetWorld(XMMatrixIdentity());
+    m_effect->SetView(XMMatrixIdentity());
+    m_effect->SetProjection(wvp);
+    m_effect->SetTexture(m_texture.GetSRV());
+    m_effect->Apply(ctx);
 
-    XMMATRIX wvpT = XMMatrixTranspose(wvp);
-    ctx->UpdateSubresource(m_cbPerObject.Get(), 0, nullptr, &wvpT, 0, 0);
+    // ★ Quad 内の CommonStates を使用（半透明PNG想定）
+    Gfx::SetAlphaNonPremul(ctx, m_states.get());
+    ID3D11SamplerState* samp = m_states->LinearWrap();
+    ctx->PSSetSamplers(0, 1, &samp);
 
-    ID3D11Buffer* cbs[] = { m_cbPerObject.Get() };
-    ctx->VSSetConstantBuffers(0, 1, cbs);
-    ctx->PSSetConstantBuffers(0, 1, cbs);
-
-    if (m_states && m_texture.GetSRV())
-    {
-        ID3D11ShaderResourceView* srv = m_texture.GetSRV();
-        ID3D11SamplerState* samp = m_states->LinearWrap();
+    // SRV
+    if (auto* srv = m_texture.GetSRV())
         ctx->PSSetShaderResources(0, 1, &srv);
-        ctx->PSSetSamplers(0, 1, &samp);
-    }
-    ctx->OMSetBlendState(m_states->NonPremultiplied(), nullptr, 0xFFFFFFFF); // ← 重要
 
+    // Draw
     ctx->DrawIndexed(6, 0, 0);
-    ctx->OMSetBlendState(m_states->Opaque(), nullptr, 0xFFFFFFFF);
+
+    //// 後片付け（任意）
+    //ID3D11ShaderResourceView* nullSRV = nullptr;
+    //ctx->PSSetShaderResources(0, 1, &nullSRV);
+    Gfx::SetOpaque(ctx, m_states.get());
 }

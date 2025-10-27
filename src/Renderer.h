@@ -5,7 +5,6 @@
 #include <memory>
 #include <d3d11.h>
 #include <DirectXColors.h>
-#include <CommonStates.h>
 #include "Gfx.h"
 
 class Renderer
@@ -19,8 +18,8 @@ public:
     void BeginFrame();
     void EndFrame();
     void Present();
-    DirectX::CommonStates* States() const { return m_states.get(); }
+    //DirectX::CommonStates* States() const { return m_states.get(); }
 private:
-    std::shared_ptr<DirectX::CommonStates> m_states;
+    //std::shared_ptr<DirectX::CommonStates> m_states;
     float m_clear[4]{ 0.1f, 0.18f, 0.25f, 1.0f };
 };

@@ -5,9 +5,7 @@ using namespace DirectX;
 
 void Renderer::Initialize()
 {
-    // ★ Appが先にGfx::Init()を済ませている前提
-    m_states = std::make_unique<CommonStates>(Gfx::Dev());
-
+  
 }
 
 void Renderer::OnResize(unsigned w, unsigned h)
@@ -46,11 +44,6 @@ void Renderer::BeginFrame()
     ctx->ClearRenderTargetView(rtv, m_clear);
     if (dsv)
         ctx->ClearDepthStencilView(dsv, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
-
-    // デフォルトステート設定（不透明3D用）
-    ctx->OMSetBlendState(m_states->Opaque(), nullptr, 0xFFFFFFFF);
-    ctx->OMSetDepthStencilState(m_states->DepthDefault(), 0);
-    ctx->RSSetState(m_states->CullNone());
 }
 
 void Renderer::EndFrame()

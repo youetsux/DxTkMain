@@ -65,13 +65,11 @@
     <ClInclude Include="src\Texture.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
+    <ClInclude Include="src\GfxState.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Text Include="src\README.txt" />
-  </ItemGroup>
-  <ItemGroup>
-    <FxCompile Include="assets\shaders\Quad.hlsl">
-      <Filter>ソース ファイル</Filter>
-    </FxCompile>
   </ItemGroup>
 </Project>

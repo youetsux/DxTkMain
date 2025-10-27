@@ -32,7 +32,6 @@ void App::Initialize(HWND hwnd, unsigned w, unsigned h)
     // m_quad.Initialize();
     //   B) 引数あり版：今の定義が device を要するならこちら
     m_quad.Initialize();
-    m_quad.SetCommonStates(m_renderer.States()); // ← これだけ！
 
     m_ready = true;
 }
@@ -84,7 +83,6 @@ void App::Shutdown()
     Gfx::Reset();
 
     // 所有リソースを破棄
-    m_quad = Quad{};
 	m_renderer = Renderer{};
 
     m_ready = false;
