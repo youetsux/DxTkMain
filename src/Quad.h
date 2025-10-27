@@ -5,26 +5,28 @@
 #include <wrl/client.h>
 #include <d3d11.h>
 #include <DirectXMath.h>
-#pragma comment(lib, "d3dcompiler.lib")
 
 class Quad {
 public:
-    Quad() = default;
-    ~Quad() = default;
+    // Gfx::Init() 済みが前提。引数なしでOK。
+    void Initialize();
 
-    void Initialize(ID3D11Device* device);
-    void Draw(ID3D11DeviceContext* ctx);
-    void Release();
+    // 呼び出し側（Appなど）で合成した WVP を渡す
+    void Draw(const DirectX::XMMATRIX& wvp);
+
+    // 必要なら解放（省略可：ComPtrが自動解放）
+    void Release() { *this = Quad{}; }
 
 private:
+    // 定数バッファ（b0: 4x4）
+    Microsoft::WRL::ComPtr<ID3D11Buffer>       m_cbPerObject;
+
+    // ジオメトリ
+    Microsoft::WRL::ComPtr<ID3D11Buffer>       m_vb;
+    Microsoft::WRL::ComPtr<ID3D11Buffer>       m_ib;
+
+    // シェーダ & レイアウト（Quad が責務を持つ）
     Microsoft::WRL::ComPtr<ID3D11VertexShader> m_vs;
     Microsoft::WRL::ComPtr<ID3D11PixelShader>  m_ps;
     Microsoft::WRL::ComPtr<ID3D11InputLayout>  m_layout;
-    Microsoft::WRL::ComPtr<ID3D11Buffer>       m_vb;
-    Microsoft::WRL::ComPtr<ID3D11Buffer>       m_ib;
-    Microsoft::WRL::ComPtr<ID3D11Buffer>       m_cb;
-    Microsoft::WRL::ComPtr<ID3D11RasterizerState>   m_rsCullNone;
-    Microsoft::WRL::ComPtr<ID3D11DepthStencilState> m_dsOff;
-
-    struct CBColor { DirectX::XMFLOAT4 color; };
 };
