@@ -134,6 +134,7 @@
     <ClCompile Include="src\Dice.cpp" />
     <ClCompile Include="src\Gfx.cpp" />
     <ClCompile Include="src\Main.cpp" />
+    <ClCompile Include="src\NDice.cpp" />
     <ClCompile Include="src\Quad.cpp" />
     <ClCompile Include="src\Renderer.cpp" />
     <ClCompile Include="src\Texture.cpp" />
@@ -145,6 +146,7 @@
     <ClInclude Include="src\Dice.h" />
     <ClInclude Include="src\Gfx.h" />
     <ClInclude Include="src\GfxState.h" />
+    <ClInclude Include="src\NDice.h" />
     <ClInclude Include="src\Quad.h" />
     <ClInclude Include="src\Renderer.h" />
     <ClInclude Include="src\Texture.h" />

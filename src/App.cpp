@@ -24,7 +24,7 @@ void App::Initialize(HWND hwnd, unsigned w, unsigned h)
     // 4) カメラ初期化（ページ準拠API）
     Camera::Initialize();
     Camera::SetPerspective(XM_PIDIV4, float(w) / float(h));
-    Camera::SetPosition(XMVectorSet(0, 0, -3, 0));
+    Camera::SetPosition(XMVectorSet(0, 3, -3, 0));
     Camera::SetTarget(XMVectorSet(0, 0, 0, 0));
 
 
@@ -32,7 +32,7 @@ void App::Initialize(HWND hwnd, unsigned w, unsigned h)
     //m_quad.Initialize();
 
     m_dice.Initialize();
-    
+	m_dice.LoadTexture(L".\\Assets\\Dice.png");
 
 
     m_ready = true;
@@ -51,6 +51,7 @@ void App::OnResize(unsigned w, unsigned h)
 
 void App::Update()
 {
+    Camera::Update();
 	static float dt = 1.0f / 60.0f; // 仮固定値（本来は経過時間を計測）
     if (!m_ready) return;
 
@@ -69,11 +70,15 @@ void App::Render()
     XMMATRIX Wx = XMMatrixRotationX(m_angle/3.0);
     XMMATRIX V = Camera::GetViewMatrix();
     XMMATRIX P = Camera::GetProjectionMatrix();
+    //XMMATRIX world = XMMatrixIdentity();
+    //XMMATRIX view = XMMatrixLookAtLH({ 2,2,-3 }, { 0,0,0 }, { 0,1,0 });
+    //float aspect = static_cast<float>(Gfx::Width()) / static_cast<float>(Gfx::Height());
+    //XMMATRIX proj = XMMatrixPerspectiveFovLH(XM_PIDIV4, aspect, 0.1f, 100.0f);
     //XMMATRIX WVP = W * V * P;
 
     //// 引数なし版を採用しているなら：m_quad.Draw(WVP);
     //m_quad.Draw( WVP);
-    m_dice.Draw(Wy*Wx*V*P);
+    m_dice.Draw(Wy, V, P);
     
     m_renderer.EndFrame();
     m_renderer.Present();

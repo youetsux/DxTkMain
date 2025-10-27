@@ -9,7 +9,7 @@
 //#include "Quad.h"              // Quad::Initialize/Draw
 #include "Camera.h"            // namespace Camera
 #include "Gfx.h"    
-#include "Dice.h"
+#include "NDice.h"
 
 class App {
 public:
@@ -34,7 +34,7 @@ private:
 
     Renderer m_renderer;
     //Quad     m_quad;
-	Dice    m_dice;
+	NDice    m_dice;
 
     bool m_ready = false;
 
