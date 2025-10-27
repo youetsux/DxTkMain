@@ -9,7 +9,7 @@ public:
     Texture();
     ~Texture();
 
-    // PNG/JPG のみ対応（拡張子チェック）
+    // WIC対応フォーマットのみ（PNG/JPG/BMP/GIF/TIFF/ICO など）
     HRESULT Load(std::string fileName);
     void    Release();
 
@@ -19,7 +19,7 @@ public:
     unsigned Height() const { return m_height; }
 
 private:
-    static std::wstring ToWString(const std::string& s);
+    static std::wstring ToWString(const std::string& s); // UTF-8 -> UTF-16
 
 private:
     Microsoft::WRL::ComPtr<ID3D11Resource>           m_tex;

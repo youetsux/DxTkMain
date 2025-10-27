@@ -1,25 +1,20 @@
 #include "Texture.h"
-
-// 重要: codecvt は使わず Windows API で文字コード変換
-#include <Windows.h>
-
-#include <DirectXTex.h>   // DirectXTex（WIC読み込みで使用）
-#include "Gfx.h"          // Gfx::Dev(), Gfx::Ctx() を想定
+#include <Windows.h>                // MultiByteToWideChar
+#include <WICTextureLoader.h>       // ★ DirectXTK
+#include "Gfx.h"                    // Gfx::Dev()
 
 using Microsoft::WRL::ComPtr;
-using namespace DirectX;
 
 Texture::Texture() {}
 Texture::~Texture() { Release(); }
 
-// UTF-8 → UTF-16（C++17対応：MultiByteToWideChar 使用）
+// UTF-8 → UTF-16（C++17/Win専用・簡潔）
 std::wstring Texture::ToWString(const std::string& s)
 {
-    if (s.empty()) return std::wstring();
-    int len = MultiByteToWideChar(CP_UTF8, 0, s.data(), static_cast<int>(s.size()), nullptr, 0);
-    if (len <= 0) return std::wstring();
+    if (s.empty()) return {};
+    const int len = MultiByteToWideChar(CP_UTF8, 0, s.data(), (int)s.size(), nullptr, 0);
     std::wstring w(len, L'\0');
-    MultiByteToWideChar(CP_UTF8, 0, s.data(), static_cast<int>(s.size()), w.data(), len);
+    MultiByteToWideChar(CP_UTF8, 0, s.data(), (int)s.size(), w.data(), len);
     return w;
 }
 
@@ -28,40 +23,41 @@ HRESULT Texture::Load(std::string fileName)
     Release();
 
     auto* device = Gfx::Dev();
-    auto* context = Gfx::Ctx();
-    if (!device || !context)
-        return E_POINTER;
+    if (!device) return E_POINTER;
 
     const std::wstring wpath = ToWString(fileName);
 
-    // ---- WIC対応フォーマットを読み込み（ミップなし / sRGB変換なし）----
-    ScratchImage image;
-    HRESULT hr = LoadFromWICFile(wpath.c_str(), WIC_FLAGS_NONE, nullptr, image);
-    if (FAILED(hr))
-        return hr;
-
-    const TexMetadata& meta = image.GetMetadata();
-
-    // ---- GPU テクスチャ作成 ----
+    // DXTK 1行読み込み（WIC対応フォーマット）＋ SRV 作成
     ComPtr<ID3D11Resource> tex;
-    hr = CreateTexture(device,
-        image.GetImages(),
-        image.GetImageCount(),
-        meta,
-        tex.GetAddressOf());
-    if (FAILED(hr))
-        return hr;
-
-    // ---- SRV 作成（※ D3D11 のメソッドを呼ぶこと！）----
     ComPtr<ID3D11ShaderResourceView> srv;
-    hr = device->CreateShaderResourceView(tex.Get(), nullptr, srv.GetAddressOf());
-    if (FAILED(hr))
-        return hr;
 
-    if (meta.dimension == TEX_DIMENSION_TEXTURE2D)
+    // 既定: WIC_LOADER_DEFAULT（必要なら FORCE_SRGB 等に変更可）
+    HRESULT hr = DirectX::CreateWICTextureFromFileEx(
+        device,
+        wpath.c_str(),
+        0,                              // maxsize = 既定
+        D3D11_USAGE_DEFAULT,
+        D3D11_BIND_SHADER_RESOURCE,
+        0,                              // CPUアクセスなし
+        0,                              // misc flags なし
+        DirectX::WIC_LOADER_DEFAULT,    // ローダーフラグ
+        reinterpret_cast<ID3D11Resource**>(tex.ReleaseAndGetAddressOf()),
+        srv.ReleaseAndGetAddressOf()
+    );
+    if (FAILED(hr)) return hr;
+
+    // 幅・高さを取得（2Dテクスチャ前提）
+    m_width = m_height = 0;
+    if (tex)
     {
-        m_width = static_cast<unsigned>(meta.width);
-        m_height = static_cast<unsigned>(meta.height);
+        ComPtr<ID3D11Texture2D> t2d;
+        if (SUCCEEDED(tex.As(&t2d)))
+        {
+            D3D11_TEXTURE2D_DESC d{};
+            t2d->GetDesc(&d);
+            m_width = d.Width;
+            m_height = d.Height;
+        }
     }
 
     m_tex = tex;
