@@ -134,10 +134,14 @@
     <ClCompile Include="src\Dice.cpp" />
     <ClCompile Include="src\Gfx.cpp" />
     <ClCompile Include="src\Main.cpp" />
+    <ClCompile Include="src\Model.cpp" />
     <ClCompile Include="src\NDice.cpp" />
     <ClCompile Include="src\Quad.cpp" />
     <ClCompile Include="src\Renderer.cpp" />
     <ClCompile Include="src\Texture.cpp" />
+    <ClCompile Include="src\Transform.cpp" />
+    <ClCompile Include="src\ufbx.c" />
+    <ClCompile Include="src\UfbxStaticModel.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\App.h" />
@@ -146,10 +150,14 @@
     <ClInclude Include="src\Dice.h" />
     <ClInclude Include="src\Gfx.h" />
     <ClInclude Include="src\GfxState.h" />
+    <ClInclude Include="src\Model.h" />
     <ClInclude Include="src\NDice.h" />
     <ClInclude Include="src\Quad.h" />
     <ClInclude Include="src\Renderer.h" />
     <ClInclude Include="src\Texture.h" />
+    <ClInclude Include="src\Transform.h" />
+    <ClInclude Include="src\ufbx.h" />
+    <ClInclude Include="src\UfbxStaticModel.h" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="src\README.txt" />
