@@ -22,7 +22,7 @@ namespace Model
     };
 
     // モジュール初期化（最大登録数を指定）
-    void Initialize(size_t maxCount = 32);
+    void Initialize(size_t maxCount);
 
     // すべて破棄
     void AllRelease();
@@ -38,6 +38,9 @@ namespace Model
 
     // ワールド行列取得（Transform から生成／失敗時は単位行列）
     DirectX::XMMATRIX GetMatrix(int handle);
+
+    // ★ 新規追加：単体モデルを描画（Transform を使用する）
+    void DrawUfbx(int handle, const DirectX::XMMATRIX& view, const DirectX::XMMATRIX& proj);
 
     // UFBX モデルの一括描画
     void DrawUfbxAll(const DirectX::XMMATRIX& view, const DirectX::XMMATRIX& proj);
