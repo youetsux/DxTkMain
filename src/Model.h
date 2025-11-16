@@ -19,6 +19,12 @@ namespace Model
         std::string fileName;
         Transform transform;
         std::unique_ptr<UfbxStaticModel> ufbx;
+        // FBX の生シーンデータ（アニメ情報を保持）
+        std::unique_ptr<ufbx_scene, void(*)(ufbx_scene*)> scene
+            = std::unique_ptr<ufbx_scene, void(*)(ufbx_scene*)>(nullptr, ufbx_free_scene);
+
+        // アニメ FPS（後で scene の anim->fps から取得する）
+        float animationFps = 60.0f;
     };
 
     // モジュール初期化（最大登録数を指定）

@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include <memory>
+#include "ufbx.h"
 
 #include "Transform.h"
 #include "UfbxStaticModel.h"
@@ -71,14 +72,54 @@ namespace Model
     {
         for (size_t i = 0; i < g_models.size(); ++i) {
             if (!g_models[i].used) {
+
                 g_models[i].used = true;
                 g_models[i].fileName = fbxPath;
+
+                //-------------------------------------------------------
+                // ★ 1) FBX 生シーンデータの読み込み
+                //-------------------------------------------------------
+                ufbx_error err;
+                ufbx_load_opts opts;
+                memset(&err, 0, sizeof(err));
+                memset(&opts, 0, sizeof(opts));
+
+                // 今のエンジンに合わせた座標変換（UfbxStaticModel と同じ）
+                opts.target_axes = ufbx_axes_left_handed_y_up;
+                opts.handedness_conversion_axis = UFBX_MIRROR_AXIS_Z;
+
+                ufbx_scene* rawScene = ufbx_load_file(fbxPath, &opts, &err);
+                if (!rawScene) {
+                    g_models[i].used = false;
+                    return -1;
+                }
+
+                // ★ 生シーンを unique_ptr に配置
+                g_models[i].scene =
+                    std::unique_ptr<ufbx_scene, void(*)(ufbx_scene*)>(
+                        rawScene, ufbx_free_scene);
+
+                //-------------------------------------------------------
+                // ★ 2) FPS を Scene から抽出
+                //-------------------------------------------------------
+                if (g_models[i].scene && g_models[i].scene->anim && g_models[i].scene->anim->fps > 0.0) {
+                    g_models[i].animationFps = (float)g_models[i].scene->anim->fps;
+                }
+                else {
+                    g_models[i].animationFps = 30.0f; // fallback
+                }
+
+                //-------------------------------------------------------
+                // ★ 3) メッシュ部分の読み込み（既存の UfbxStaticModel）
+                //-------------------------------------------------------
                 g_models[i].ufbx = std::make_unique<UfbxStaticModel>();
                 if (!g_models[i].ufbx->Load(fbxPath)) {
                     g_models[i].used = false;
                     g_models[i].ufbx.reset();
+                    g_models[i].scene.reset();
                     return -1;
                 }
+
                 return (int)i;
             }
         }
