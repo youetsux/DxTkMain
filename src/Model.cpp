@@ -1,189 +1,290 @@
-#pragma once
+ï»¿// Model.cpp â€” anonymous namespace at file top (file-scope internal state)
+#include "Model.h"
 
-#include <DirectXMath.h>
-#include <string>
 #include <vector>
 #include <memory>
+#include <cstring>
+#include <cmath>
+#include <d3d11.h>
+
+#include "Gfx.h"
 #include "ufbx.h"
 
-#include "Transform.h"
-#include "UfbxStaticModel.h"
+using namespace DirectX;
 
-struct RayCastData;
-
-namespace Model
+namespace
 {
-    //struct ModelData
-    //{
-    //    bool used = false;
-    //    std::string fileName;
-    //    Transform transform;
-    //    std::unique_ptr<UfbxStaticModel> ufbx;
-    //};
+    // file-scope internal state (clearly file-local)
+    std::vector<Model::ModelData> g_models;
+    bool g_initialized = false;
 
-    void Initialize(size_t maxCount = 32);
-    void AllRelease();
-    void Delete(int handle);
-    int LoadUfbx(const char* fbxPath);
-    void SetTransform(int handle, const Transform& transform);
-    DirectX::XMMATRIX GetMatrix(int handle);
+    // ä»®ã®ã‚«ãƒ¡ãƒ©è¡Œåˆ—ï¼ˆãƒ•ã‚¡ã‚¤ãƒ«å†…é™å®šï¼‰
+    XMMATRIX g_viewMatrix = XMMatrixIdentity();
+    XMMATRIX g_projMatrix = XMMatrixIdentity();
+    bool     g_hasViewProj = false;
 
-    // V‹K’Ç‰ÁF’P‘Ìƒ‚ƒfƒ‹•`‰æiTransform ‚ğg—p‚·‚éj
-    void DrawUfbx(int handle, const DirectX::XMMATRIX& view, const DirectX::XMMATRIX& proj);
-
-    // ]—ˆ‚Ç‚¨‚èF‘Sƒ‚ƒfƒ‹•`‰æ
-    void DrawUfbxAll(const DirectX::XMMATRIX& view, const DirectX::XMMATRIX& proj);
-    void DrawSkeletonAll(const DirectX::XMMATRIX& view, const DirectX::XMMATRIX& proj);
-    void RayCast(int handle, RayCastData* data);
+    // helper: frame (60fps) -> time in seconds
+    inline double FrameToTime(int frame) { return static_cast<double>(frame) / 60.0; }
 }
 
-//--------------------------------------
-// Model.cpp
-//--------------------------------------
-#include "Model.h"
-#include "Gfx.h"
-
 namespace Model
 {
-    static std::vector<ModelData> g_models;
-
     void Initialize(size_t maxCount)
     {
         g_models.clear();
         g_models.resize(maxCount);
+        g_initialized = true;
     }
 
     void AllRelease()
     {
         for (auto& m : g_models) {
             m.ufbx.reset();
+            m.scene.reset();
             m.used = false;
+            m.fileName.clear();
+            m.transform = Transform{};
+            m.animInfo = AnimState{};
         }
+        g_initialized = false;
     }
 
     void Delete(int handle)
     {
-        if (handle < 0 || handle >= (int)g_models.size()) return;
-        g_models[handle].ufbx.reset();
-        g_models[handle].used = false;
+        if (handle < 0 || handle >= static_cast<int>(g_models.size())) return;
+        auto& m = g_models[handle];
+        m.ufbx.reset();
+        m.scene.reset();
+        m.used = false;
+        m.fileName.clear();
+        m.transform = Transform{};
+        m.animInfo = AnimState{};
     }
 
     int LoadUfbx(const char* fbxPath)
     {
+        if (!fbxPath) return -1;
+        if (!g_initialized) Initialize(32);
+
         for (size_t i = 0; i < g_models.size(); ++i) {
             if (!g_models[i].used) {
+                ModelData& m = g_models[i];
 
-                g_models[i].used = true;
-                g_models[i].fileName = fbxPath;
+                m.used = true;
+                m.fileName = fbxPath;
 
                 //-------------------------------------------------------
-                // š 1) FBX ¶ƒV[ƒ“ƒf[ƒ^‚Ì“Ç‚İ‚İ
+                // 1) FBX ç”Ÿã‚·ãƒ¼ãƒ³ãƒ‡ãƒ¼ã‚¿ã®èª­ã¿è¾¼ã¿
                 //-------------------------------------------------------
                 ufbx_error err;
                 ufbx_load_opts opts;
-                memset(&err, 0, sizeof(err));
-                memset(&opts, 0, sizeof(opts));
+                std::memset(&err, 0, sizeof(err));
+                std::memset(&opts, 0, sizeof(opts));
 
-                // ¡‚ÌƒGƒ“ƒWƒ“‚É‡‚í‚¹‚½À•W•ÏŠ·iUfbxStaticModel ‚Æ“¯‚¶j
                 opts.target_axes = ufbx_axes_left_handed_y_up;
                 opts.handedness_conversion_axis = UFBX_MIRROR_AXIS_Z;
 
                 ufbx_scene* rawScene = ufbx_load_file(fbxPath, &opts, &err);
                 if (!rawScene) {
-                    g_models[i].used = false;
+                    m.used = false;
                     return -1;
                 }
 
-                // š ¶ƒV[ƒ“‚ğ unique_ptr ‚É”z’u
-                g_models[i].scene =
-                    std::unique_ptr<ufbx_scene, void(*)(ufbx_scene*)>(
-                        rawScene, ufbx_free_scene);
+                m.scene = std::unique_ptr<ufbx_scene, void(*)(ufbx_scene*)>(
+                    rawScene, ufbx_free_scene);
 
                 //-------------------------------------------------------
-                // š 2) FPS ‚ğ Scene ‚©‚ç’Šo
+                // 2) ã‚¢ãƒ‹ãƒ¡æƒ…å ±ã®åˆæœŸåŒ–ï¼ˆ60fpså‰æï¼‰
                 //-------------------------------------------------------
-                if (g_models[i].scene && g_models[i].scene->anim && g_models[i].scene->anim->fps > 0.0) {
-                    g_models[i].animationFps = (float)g_models[i].scene->anim->fps;
+                m.animationFps = 60.0f;
+                m.animInfo = AnimState{}; // reset
+
+                if (m.scene && m.scene->anim) {
+                    const ufbx_anim* anim = m.scene->anim;
+                    double begin = anim->time_begin;
+                    double end = anim->time_end;
+                    double duration = end - begin;
+                    if (duration < 0.0) duration = 0.0;
+
+                    m.animInfo.beginTime = begin;
+                    m.animInfo.endTime = end;
+                    m.animInfo.totalFrames = static_cast<int>(std::ceil(duration * 60.0));
+
+                    m.animInfo.startFrame = 0;
+                    m.animInfo.endFrame = (m.animInfo.totalFrames > 0) ? (m.animInfo.totalFrames - 1) : 0;
+                    m.animInfo.currentFrame = 0.0f;
+                    m.animInfo.speed = 1.0f;
+                    m.animInfo.loop = true;
                 }
                 else {
-                    g_models[i].animationFps = 30.0f; // fallback
+                    // no animation
+                    m.animInfo.beginTime = 0.0;
+                    m.animInfo.endTime = 0.0;
+                    m.animInfo.totalFrames = 0;
+                    m.animInfo.startFrame = 0;
+                    m.animInfo.endFrame = 0;
+                    m.animInfo.currentFrame = 0.0f;
+                    m.animInfo.speed = 1.0f;
+                    m.animInfo.loop = true;
                 }
 
                 //-------------------------------------------------------
-                // š 3) ƒƒbƒVƒ…•”•ª‚Ì“Ç‚İ‚İiŠù‘¶‚Ì UfbxStaticModelj
+                // 3) ãƒ¡ãƒƒã‚·ãƒ¥éƒ¨åˆ†ã®èª­ã¿è¾¼ã¿ï¼ˆæ—¢å­˜ã® UfbxStaticModelï¼‰
                 //-------------------------------------------------------
-                g_models[i].ufbx = std::make_unique<UfbxStaticModel>();
-                if (!g_models[i].ufbx->Load(fbxPath)) {
-                    g_models[i].used = false;
-                    g_models[i].ufbx.reset();
-                    g_models[i].scene.reset();
+                m.ufbx = std::make_unique<UfbxStaticModel>();
+                if (!m.ufbx->Load(fbxPath)) {
+                    m.used = false;
+                    m.ufbx.reset();
+                    m.scene.reset();
                     return -1;
                 }
 
-                return (int)i;
+                return static_cast<int>(i);
             }
         }
+
         return -1;
     }
 
     void SetTransform(int handle, const Transform& transform)
     {
-        if (handle < 0 || handle >= (int)g_models.size()) return;
-        g_models[handle].transform = transform;
+        if (handle < 0 || handle >= static_cast<int>(g_models.size())) return;
+        auto& m = g_models[handle];
+        if (!m.used) return;
+        m.transform = transform;
     }
 
-    DirectX::XMMATRIX GetMatrix(int handle)
+    XMMATRIX GetMatrix(int handle)
     {
-        using namespace DirectX;
-        if (handle < 0 || handle >= (int)g_models.size()) return XMMatrixIdentity();
-        auto& e = g_models[handle];
-        e.transform.Calclation();
-        return e.transform.GetWorldMatrix();
+        if (handle < 0 || handle >= static_cast<int>(g_models.size())) return XMMatrixIdentity();
+        auto& m = g_models[handle];
+        if (!m.used) return XMMatrixIdentity();
+        m.transform.Calclation();
+        return m.transform.GetWorldMatrix();
     }
 
-    //============================================
-    // V‹KÀ‘•FTransform ‚ğg‚Á‚½’P‘Ì•`‰æ
-    //============================================
-    void DrawUfbx(int handle, const DirectX::XMMATRIX& view, const DirectX::XMMATRIX& proj)
+    // ã‚«ãƒ¡ãƒ©è¡Œåˆ—ã‚’ä¿å­˜ï¼ˆãƒ•ã‚¡ã‚¤ãƒ«ã‚¹ã‚³ãƒ¼ãƒ—ã® g_viewMatrix/g_projMatrix ã‚’æ›´æ–°ï¼‰
+    void SetViewProjection(const XMMATRIX& view, const XMMATRIX& proj)
     {
-        using namespace DirectX;
-        if (handle < 0 || handle >= (int)g_models.size()) return;
-        auto& e = g_models[handle];
-        if (!e.used || !e.ufbx) return;
-
-        e.transform.Calclation();
-        XMMATRIX world = e.transform.GetWorldMatrix();
-
-        e.ufbx->Draw(world, view, proj);
+        g_viewMatrix = view;
+        g_projMatrix = proj;
+        g_hasViewProj = true;
     }
 
-    //============================================
-    // ‘S‘Ì•`‰æiŠù‘¶j
-    //============================================
-    void DrawUfbxAll(const DirectX::XMMATRIX& view, const DirectX::XMMATRIX& proj)
+    // æç”»ï¼ˆå†…éƒ¨ Transform ã‚’ä½¿ã†ï¼‰
+    void DrawUfbx(int handle)
     {
-        using namespace DirectX;
-        for (auto& e : g_models) {
-            if (!e.used || !e.ufbx) continue;
-            e.transform.Calclation();
-            XMMATRIX world = e.transform.GetWorldMatrix();
-            e.ufbx->Draw(world, view, proj);
+        if (!g_hasViewProj) return;
+        if (handle < 0 || handle >= static_cast<int>(g_models.size())) return;
+
+        ModelData& m = g_models[handle];
+        if (!m.used || !m.ufbx) return;
+
+        m.transform.Calclation();
+        XMMATRIX world = m.transform.GetWorldMatrix();
+
+        // ç¾çŠ¶ DrawUfbx ã¯ã€Œæ—¢ã«è©•ä¾¡æ¸ˆã®ã‚¹ã‚±ãƒ«ãƒˆãƒ³çŠ¶æ…‹ã‚’æãã€å‹•ä½œ
+        m.ufbx->Draw(world, g_viewMatrix, g_projMatrix);
+    }
+
+    // Transform æŒ‡å®šã§æç”»ï¼ˆå†…éƒ¨ Transform ã¯å¤‰æ›´ã—ãªã„ï¼‰
+    void DrawUfbx(int handle, const Transform& transform)
+    {
+        if (!g_hasViewProj) return;
+        if (handle < 0 || handle >= static_cast<int>(g_models.size())) return;
+
+        ModelData& m = g_models[handle];
+        if (!m.used || !m.ufbx) return;
+
+        Transform tmp = transform;
+        tmp.Calclation();
+        XMMATRIX world = tmp.GetWorldMatrix();
+
+        m.ufbx->Draw(world, g_viewMatrix, g_projMatrix);
+    }
+
+    // ãƒ•ãƒ¬ãƒ¼ãƒ æŒ‡å®šã§ã‚¢ãƒ‹ãƒ¡ã‚’è©•ä¾¡ã—ã¦æç”»ï¼ˆå†…éƒ¨ Transform ã‚’ä½¿ã†ï¼‰
+    void DrawUfbxAtFrame(int handle, int frame)
+    {
+        if (!g_hasViewProj) return;
+        if (handle < 0 || handle >= static_cast<int>(g_models.size())) return;
+
+        ModelData& m = g_models[handle];
+        if (!m.used || !m.ufbx) return;
+
+        if (m.scene && m.scene->anim && m.animInfo.totalFrames > 0) {
+            int f = frame;
+            if (f < m.animInfo.startFrame) f = m.animInfo.startFrame;
+            if (f > m.animInfo.endFrame)   f = m.animInfo.endFrame;
+
+            double t = m.animInfo.beginTime + FrameToTime(f);
+            if (t < m.animInfo.beginTime) t = m.animInfo.beginTime;
+            if (t > m.animInfo.endTime)   t = m.animInfo.endTime;
+
+            m.ufbx->UpdateSkeletonAtTime(m.scene.get(), t);
+        }
+
+        m.transform.Calclation();
+        XMMATRIX world = m.transform.GetWorldMatrix();
+        m.ufbx->Draw(world, g_viewMatrix, g_projMatrix);
+    }
+
+    // ãƒ•ãƒ¬ãƒ¼ãƒ æŒ‡å®šã§æç”»ï¼ˆæŒ‡å®š Transform ã‚’ä½¿ã†ï¼‰
+    void DrawUfbxAtFrame(int handle, const Transform& transform, int frame)
+    {
+        if (!g_hasViewProj) return;
+        if (handle < 0 || handle >= static_cast<int>(g_models.size())) return;
+
+        ModelData& m = g_models[handle];
+        if (!m.used || !m.ufbx) return;
+
+        if (m.scene && m.scene->anim && m.animInfo.totalFrames > 0) {
+            int f = frame;
+            if (f < m.animInfo.startFrame) f = m.animInfo.startFrame;
+            if (f > m.animInfo.endFrame)   f = m.animInfo.endFrame;
+
+            double t = m.animInfo.beginTime + FrameToTime(f);
+            if (t < m.animInfo.beginTime) t = m.animInfo.beginTime;
+            if (t > m.animInfo.endTime)   t = m.animInfo.endTime;
+
+            m.ufbx->UpdateSkeletonAtTime(m.scene.get(), t);
+        }
+
+        Transform tmp = transform;
+        tmp.Calclation();
+        XMMATRIX world = tmp.GetWorldMatrix();
+        m.ufbx->Draw(world, g_viewMatrix, g_projMatrix);
+    }
+
+    void DrawUfbxAll()
+    {
+        if (!g_hasViewProj) return;
+
+        for (size_t i = 0; i < g_models.size(); ++i) {
+            if (!g_models[i].used || !g_models[i].ufbx) continue;
+            g_models[i].transform.Calclation();
+            XMMATRIX world = g_models[i].transform.GetWorldMatrix();
+
+            g_models[i].ufbx->Draw(world, g_viewMatrix, g_projMatrix);
         }
     }
 
-    void DrawSkeletonAll(const DirectX::XMMATRIX& view, const DirectX::XMMATRIX& proj)
+    void DrawSkeletonAll()
     {
-        using namespace DirectX;
-        for (auto& e : g_models) {
-            if (!e.used || !e.ufbx) continue;
-            e.transform.Calclation();
-            XMMATRIX world = e.transform.GetWorldMatrix();
-            e.ufbx->DrawSkeleton(world, view, proj);
+        if (!g_hasViewProj) return;
+
+        for (size_t i = 0; i < g_models.size(); ++i) {
+            if (!g_models[i].used || !g_models[i].ufbx) continue;
+            g_models[i].transform.Calclation();
+            XMMATRIX world = g_models[i].transform.GetWorldMatrix();
+
+            g_models[i].ufbx->DrawSkeleton(world, g_viewMatrix, g_projMatrix);
         }
     }
 
     void RayCast(int handle, RayCastData* data)
     {
-        // –¢À‘•
+        (void)handle;
+        (void)data;
     }
-}
+} // namespace Model
