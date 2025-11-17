@@ -7,54 +7,52 @@
 
 #include "Transform.h"
 #include "UfbxStaticModel.h"
-#include "ufbx.h"
+#include "ufbx.h" // ufbx_scene / ufbx_free_scene
 
-
-// RayCast 用データ（本体は別ヘッダで定義されている想定）
+// RayCast 用データ（別ヘッダで定義されている想定）
 struct RayCastData;
 
 namespace Model
 {
-
+    // ---------------------------------------
+    // アニメーション状態
+    // ---------------------------------------
     struct AnimState
     {
-        // ufbx_anim の time_begin / time_end（秒）
-        double beginTime = 0.0;
-        double endTime = 0.0;
+        double beginTime = 0.0; // anim->time_begin
+        double endTime = 0.0; // anim->time_end
 
-        // 60fps 換算の総フレーム数
-        int totalFrames = 0;
+        int totalFrames = 0;    // 60fps 換算の総フレーム数
 
-        // 再生範囲（フレーム）
-        int startFrame = 0;
-        int endFrame = 0;
+        int startFrame = 0;     // 再生開始フレーム
+        int endFrame = 0;     // 再生終了フレーム
 
-        // 現在フレーム（float にして補間しやすく）
-        float currentFrame = 0.0f;
+        float currentFrame = 0.0f; // float で補間可能
 
-        // 再生スピード（1.0 = 等速、2.0 = 2倍速、-1.0 = 逆再生など想定）
-        float speed = 1.0f;
-
-        // ループ再生するかどうか
-        bool  loop = true;
+        float speed = 1.0f;        // 1.0 = 等速
+        bool  loop = true;        // ループ再生
     };
 
-    // --- 追加ここまで ---
-
+    // ---------------------------------------
+    // モデル単体のデータ
+    // ---------------------------------------
     struct ModelData
     {
         bool used = false;
+
         std::string fileName;
+
         Transform transform;
+
         std::unique_ptr<UfbxStaticModel> ufbx;
-        // FBX の生シーンデータ（アニメ情報を保持）
-        std::unique_ptr<ufbx_scene, void(*)(ufbx_scene*)> scene
-            = std::unique_ptr<ufbx_scene, void(*)(ufbx_scene*)>(nullptr, ufbx_free_scene);
 
-        // アニメ FPS（後で scene の anim->fps から取得する）
-        float animationFps = 60.0f;
+        // FBX 生シーンデータ（削除子 ufbx_free_scene）
+        std::unique_ptr<ufbx_scene, void(*)(ufbx_scene*)> scene =
+            std::unique_ptr<ufbx_scene, void(*)(ufbx_scene*)>(nullptr, ufbx_free_scene);
+
+        float animationFps = 60.0f; // 後で上書き
+
         AnimState animInfo;
-
     };
 
     // モジュール初期化（最大登録数を指定）
@@ -66,31 +64,27 @@ namespace Model
     // 単体削除
     void Delete(int handle);
 
-    // UFBX モデル読み込み（device は内部で Gfx::Dev() を使う）
+    // UFBX モデル読み込み
     int LoadUfbx(const char* fbxPath);
 
     // Transform 設定
-    void SetTransform(int handle, const Transform& transform);
+    void SetTransform(int handle, Transform& transform);
 
-    // ワールド行列取得（Transform から生成／失敗時は単位行列）
+    // Transform → 行列
     DirectX::XMMATRIX GetMatrix(int handle);
 
-    // 単体モデルを描画（内部に保持している Transform を使用）
+    // UFBX 単体描画（内部 view/proj を利用）
     void DrawUfbx(int handle);
 
-    // Transform を引数で渡して単体描画（内部 Transform は書き換えない）
-    void DrawUfbx(int handle, const Transform& transform);
+    // Transform を都度指定して描画
+    void DrawUfbx(int handle, Transform& transform);
 
-    // ★ フレーム指定での描画（frame は 60fps 前提）
-    void DrawUfbxAtFrame(int handle, int frame);
-    void DrawUfbxAtFrame(int handle, const Transform& transform, int frame);
+    // UFBX 全体描画（view/proj を内部に保存）
+    void DrawUfbxAll(const DirectX::XMMATRIX& view, const DirectX::XMMATRIX& proj);
 
-    // UFBX モデルの一括描画
-    void DrawUfbxAll();
-
-    // スケルトンの一括描画
+    // スケルトン描画（同じく内部 view/proj 利用）
     void DrawSkeletonAll();
 
-    // レイキャスト（中身はまだダミー）
+    // レイキャスト
     void RayCast(int handle, RayCastData* data);
 }
