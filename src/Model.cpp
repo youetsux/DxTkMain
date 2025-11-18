@@ -74,7 +74,7 @@ void Model::Delete(int handle)
 // ================================================================
 // Transform 設定
 // ================================================================
-void Model::SetTransform(int handle, Transform& transform)
+void Model::SetTransform(int handle,const Transform& transform)
 {
     if (handle < 0 || handle >= (int)g_models.size()) return;
     g_models[handle].transform = transform;
@@ -181,7 +181,7 @@ void Model::DrawUfbx(int handle)
 // ================================================================
 // Transform を指定して描画
 // ================================================================
-void Model::DrawUfbx(int handle, Transform& transform)
+void Model::DrawUfbx(int handle,const Transform& transform)
 {
     if (!g_initialized || !g_hasViewProj) return;
     if (handle < 0 || handle >= (int)g_models.size()) return;
@@ -208,6 +208,45 @@ void Model::DrawUfbxAll(const XMMATRIX& view, const XMMATRIX& proj)
             DrawUfbx((int)i);
     }
 }
+
+//-------------------------------------------------------------
+// 単体描画（Transform 指定・フレーム指定）
+//-------------------------------------------------------------
+void DrawUfbx(int handle, const Transform& transform, int frame)
+{
+    if (handle < 0) return;
+    if (static_cast<size_t>(handle) >= g_models.size()) return;
+
+    Model::ModelData& m = g_models[handle];
+    if (!m.used || !m.ufbx) return;
+
+    // Transform → ワールド行列
+    DirectX::XMMATRIX world = transform.GetWorldMatrix();
+
+    // アニメーションが存在する場合のみ更新
+    if (m.scene && m.scene->anim)
+    {
+        const ufbx_anim* anim = m.scene->anim;
+
+        // FPS（固定 60）
+        const double fps = 60.0;
+
+        // frame → 秒変換
+        double t_sec = anim->time_begin + (frame / fps);
+
+        // アニメ時間を Clamp
+        if (t_sec < anim->time_begin) t_sec = anim->time_begin;
+        if (t_sec > anim->time_end)   t_sec = anim->time_end;
+
+        // スケルトン更新
+        m.ufbx->UpdateSkeletonAtTime(m.scene.get(), anim, t_sec);
+    }
+
+    // 描画
+    m.ufbx->Draw(world, g_viewMatrix, g_projMatrix);
+}
+
+
 
 // ================================================================
 // スケルトン全体描画

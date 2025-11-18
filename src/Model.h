@@ -68,7 +68,7 @@ namespace Model
     int LoadUfbx(const char* fbxPath);
 
     // Transform 設定
-    void SetTransform(int handle, Transform& transform);
+    void SetTransform(int handle,const Transform& transform);
 
     // Transform → 行列
     DirectX::XMMATRIX GetMatrix(int handle);
@@ -77,7 +77,13 @@ namespace Model
     void DrawUfbx(int handle);
 
     // Transform を都度指定して描画
-    void DrawUfbx(int handle, Transform& transform);
+    void DrawUfbx(int handle,const Transform& transform);
+    
+    // フレーム指定（基本）
+    void DrawUfbx(int handle, const Transform& transform, int frame);
+
+    // 現在の transform を使うバージョン
+    void DrawUfbx(int handle, int frame);
 
     // UFBX 全体描画（view/proj を内部に保存）
     void DrawUfbxAll(const DirectX::XMMATRIX& view, const DirectX::XMMATRIX& proj);
