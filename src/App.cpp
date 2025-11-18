@@ -67,7 +67,7 @@ void App::Render()
 
     // WVP を App 側で合成して Quad に渡す（Quad がパイプラインをバインド）
     XMMATRIX Wy = XMMatrixRotationY(m_angle);
-    XMMATRIX Wx = XMMatrixRotationX(m_angle/3.0);
+    XMMATRIX Wx = XMMatrixRotationX(m_angle/3.0f);
     XMMATRIX V = Camera::GetViewMatrix();
     XMMATRIX P = Camera::GetProjectionMatrix();
     //XMMATRIX world = XMMatrixIdentity();

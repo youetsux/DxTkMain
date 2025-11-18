@@ -3,6 +3,7 @@
 #include <windows.h>
 #include "App.h"
 
+
 static App g_app;
 static unsigned gW=1280, gH=720;
 static bool g_ready=false;
