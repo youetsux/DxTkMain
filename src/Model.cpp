@@ -229,7 +229,7 @@ void DrawUfbx(int handle, const Transform& transform, int frame)
         const ufbx_anim* anim = m.scene->anim;
 
         // FPS（固定 60）
-        const double fps = 60.0;
+        const double fps = MODEL_ANIMATION_FPS;
 
         // frame → 秒変換
         double t_sec = anim->time_begin + (frame / fps);
