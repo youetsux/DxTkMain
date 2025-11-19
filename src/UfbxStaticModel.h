@@ -9,6 +9,7 @@
 
 #include <Effects.h>
 #include <CommonStates.h>
+#include "ufbx.h"
 
 // ufbx を前方宣言（ヘッダに直接依存しないようにする）
 struct ufbx_scene;
@@ -243,4 +244,5 @@ private:
     SkeletonData skeleton_;   // ボーン関連の全情報
     MeshData     mesh_;       // メッシュ関連のCPU側データ
     DrawResources draw_;      // 描画に必要な DirectX リソース群
+    std::unique_ptr<ufbx_scene, void(*)(ufbx_scene*)> scene_{ nullptr, ufbx_free_scene };
 };

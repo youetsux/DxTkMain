@@ -1,4 +1,4 @@
-#define WIN32_LEAN_AND_MEAN
+ï»¿#define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>
 #include <DirectXMath.h>
@@ -11,30 +11,23 @@ using namespace DirectX;
 
 void App::Initialize(HWND hwnd, unsigned w, unsigned h)
 {
-    // 1) DeviceResources ‚ğ App ‚ªì‚Á‚ÄŠ—L
+    // 1) DeviceResources ã‚’ App ãŒä½œã£ã¦æ‰€æœ‰
     m_dev = std::make_shared<DX::DeviceResources>();
     m_dev->SetWindow(hwnd, w, h);
     m_dev->CreateDeviceResources();
     m_dev->CreateWindowSizeDependentResources();
 
-    // 2) Gfx ‚É“o˜^iˆÈ~ Dev/Ctx/RTV/DSV/Width/Height ‚ª‚Ç‚±‚©‚ç‚Å‚àg‚¦‚éj
+    // 2) Gfx ã«ç™»éŒ²ï¼ˆä»¥é™ Dev/Ctx/RTV/DSV/Width/Height ãŒã©ã“ã‹ã‚‰ã§ã‚‚ä½¿ãˆã‚‹ï¼‰
     Gfx::Init(m_dev.get());
 
-    // 3) Renderer ‰Šú‰»iƒfƒoƒCƒX”ñŠ—Lj
+    // 3) Renderer åˆæœŸåŒ–ï¼ˆãƒ‡ãƒã‚¤ã‚¹éæ‰€æœ‰ï¼‰
     m_renderer.Initialize();
 
-    // 4) ƒJƒƒ‰‰Šú‰»iƒy[ƒW€‹’APIj
+    // 4) ã‚«ãƒ¡ãƒ©åˆæœŸåŒ–ï¼ˆãƒšãƒ¼ã‚¸æº–æ‹ APIï¼‰
     Camera::Initialize();
     Camera::SetPerspective(XMConvertToRadians(40.0f), float(w) / float(h));
     Camera::SetPosition(XMVectorSet(0, 70, -200, 0));
     Camera::SetTarget(XMVectorSet(0, 70, 0, 0));
-
-
-    //m_quad.LoadTexture(".\\Assets\\Dice.png");
-    //m_quad.Initialize();
-
- //   m_dice.Initialize();
-	//m_dice.LoadTexture(L".\\Assets\\Dice.png");
 
 	Model::Initialize(2);
 	hModel = Model::LoadUfbx(".\\Assets\\GS_MotionSet.fbx");
@@ -46,21 +39,21 @@ void App::OnResize(unsigned w, unsigned h)
 {
     if (!m_ready || w == 0 || h == 0) return;
 
-    // RTV/DSV“™‚ÌƒTƒCƒYˆË‘¶ƒŠƒ\[ƒX‚ğXV
+    // RTV/DSVç­‰ã®ã‚µã‚¤ã‚ºä¾å­˜ãƒªã‚½ãƒ¼ã‚¹ã‚’æ›´æ–°
     m_dev->WindowSizeChanged(w, h);
 
-    // ƒJƒƒ‰‚ÌƒAƒXƒyƒNƒgXVig‚Á‚Ä‚¢‚ê‚Îj
+    // ã‚«ãƒ¡ãƒ©ã®ã‚¢ã‚¹ãƒšã‚¯ãƒˆæ›´æ–°ï¼ˆä½¿ã£ã¦ã„ã‚Œã°ï¼‰
     Camera::OnResize(w, h);
 }
 
 void App::Update()
 {
     Camera::Update();
-	static float dt = 1.0f / 60.0f; // ‰¼ŒÅ’è’li–{—ˆ‚ÍŒo‰ßŠÔ‚ğŒv‘ªj
+	static float dt = 1.0f / 60.0f; // ä»®å›ºå®šå€¤ï¼ˆæœ¬æ¥ã¯çµŒéæ™‚é–“ã‚’è¨ˆæ¸¬ï¼‰
     if (!m_ready) return;
 
-    // ƒfƒ‚—p“rF‰ñ“]Šp‚ğXVi•K—v‚È‚¯‚ê‚ÎíœOKj
-    m_angle += dt * 10.0f; // 45‹/s
+    // ãƒ‡ãƒ¢ç”¨é€”ï¼šå›è»¢è§’ã‚’æ›´æ–°ï¼ˆå¿…è¦ãªã‘ã‚Œã°å‰Šé™¤OKï¼‰
+    m_angle += dt * 10.0f; // 45Â°/s
 }
 
 void App::Render()
@@ -69,20 +62,12 @@ void App::Render()
 
     m_renderer.BeginFrame();
 
-    // WVP ‚ğ App ‘¤‚Å‡¬‚µ‚Ä Quad ‚É“n‚·iQuad ‚ªƒpƒCƒvƒ‰ƒCƒ“‚ğƒoƒCƒ“ƒhj
+    // WVP ã‚’ App å´ã§åˆæˆã—ã¦ Quad ã«æ¸¡ã™ï¼ˆQuad ãŒãƒ‘ã‚¤ãƒ—ãƒ©ã‚¤ãƒ³ã‚’ãƒã‚¤ãƒ³ãƒ‰ï¼‰
     XMMATRIX Wy = XMMatrixRotationY(m_angle);
     XMMATRIX Wx = XMMatrixRotationX(m_angle/3.0f);
     XMMATRIX V = Camera::GetViewMatrix();
     XMMATRIX P = Camera::GetProjectionMatrix();
-    //XMMATRIX world = XMMatrixIdentity();
-    //XMMATRIX view = XMMatrixLookAtLH({ 2,2,-3 }, { 0,0,0 }, { 0,1,0 });
-    //float aspect = static_cast<float>(Gfx::Width()) / static_cast<float>(Gfx::Height());
-    //XMMATRIX proj = XMMatrixPerspectiveFovLH(XM_PIDIV4, aspect, 0.1f, 100.0f);
-    //XMMATRIX WVP = W * V * P;
 
-    //// ˆø”‚È‚µ”Å‚ğÌ—p‚µ‚Ä‚¢‚é‚È‚çFm_quad.Draw(WVP);
-    //m_quad.Draw( WVP);
-    //m_dice.Draw(Wy, V, P);
 	Transform t;
 	t.position_ = { 0.0f,0.0f,0.0};
 	t.rotate_ = { 0.0f, m_angle, 0.0f};
@@ -91,8 +76,9 @@ void App::Render()
 	Model::SetViewProj(V, P);
     
     Model::SetTransform(hModel, t);
-	//Model::DrawUfbx(hModel);
-	Model::DrawUfbxAll(V,P);
+
+    static int fr = 0;
+	Model::DrawUfbx(hModel, t, ++fr); // ãƒ•ãƒ¬ãƒ¼ãƒ æŒ‡å®šãƒ‡ãƒ¢
 
     m_renderer.EndFrame();
     m_renderer.Present();
@@ -102,10 +88,10 @@ void App::Shutdown()
 {
     if (!m_ready) return;
 
-    // æ‚É Gfx ‚ğŠO‚·iƒ_ƒ“ƒOƒŠƒ“ƒO–h~j
+    // å…ˆã« Gfx ã‚’å¤–ã™ï¼ˆãƒ€ãƒ³ã‚°ãƒªãƒ³ã‚°é˜²æ­¢ï¼‰
     Gfx::Reset();
 
-    // Š—LƒŠƒ\[ƒX‚ğ”jŠü
+    // æ‰€æœ‰ãƒªã‚½ãƒ¼ã‚¹ã‚’ç ´æ£„
 	m_renderer = Renderer{};
 
     m_ready = false;

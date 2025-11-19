@@ -368,21 +368,21 @@ bool UfbxStaticModel::LoadScene(
 bool UfbxStaticModel::Load(const char* fbx_path)
 {
     // ufbx_scene を unique_ptr で管理（最初は nullptr）
-    std::unique_ptr<ufbx_scene, void(*)(ufbx_scene*)> scene(
-        nullptr, ufbx_free_scene);
+    //std::unique_ptr<ufbx_scene, void(*)(ufbx_scene*)> scene(
+    //    nullptr, ufbx_free_scene);
 
     // シーン読み込み
-    if (!LoadScene(fbx_path, scene)) {
+    if (!LoadScene(fbx_path, scene_)) {
         return false;
     }
 
     // スケルトン（ボーン情報）構築
-    if (!BuildSkeletonFromScene(scene.get())) {
+    if (!BuildSkeletonFromScene(scene_.get())) {
         return false;
     }
 
     // メッシュ展開（頂点・インデックス生成）
-    ExpandAllNodes(scene.get());
+    ExpandAllNodes(scene_.get());
 
     // 頂点／インデックスの GPU バッファ作成
     if (!CreateGpuBuffers()) {
@@ -390,7 +390,7 @@ bool UfbxStaticModel::Load(const char* fbx_path)
     }
 
     // エフェクト＆テクスチャの作成
-    if (!CreateEffectsAndTextures(fbx_path, scene.get())) {
+    if (!CreateEffectsAndTextures(fbx_path, scene_.get())) {
         return false;
     }
 

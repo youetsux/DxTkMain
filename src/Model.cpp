@@ -53,7 +53,7 @@ void Model::AllRelease()
     {
         m.used = false;
         m.ufbx.reset();
-        m.scene.reset();
+        ///m.scene.reset();
     }
 }
 
@@ -68,7 +68,7 @@ void Model::Delete(int handle)
 
     m.used = false;
     m.ufbx.reset();
-    m.scene.reset();
+    //m.scene.reset();
 }
 
 // ================================================================
@@ -108,56 +108,23 @@ int Model::LoadUfbx(const char* fbxPath)
         m.fileName = fbxPath;
 
         // ------------------------------
-        // 1) ufbx 生シーン読み込み
-        // ------------------------------
-        ufbx_error err{};
-        ufbx_load_opts opts{};
-        opts.target_axes = ufbx_axes_left_handed_y_up;
-        opts.handedness_conversion_axis = UFBX_MIRROR_AXIS_Z;
-
-        ufbx_scene* rawScene = ufbx_load_file(fbxPath, &opts, &err);
-        if (!rawScene)
-        {
-            m.used = false;
-            return -1;
-        }
-
-        m.scene = std::unique_ptr<ufbx_scene, void(*)(ufbx_scene*)>(rawScene, ufbx_free_scene);
-
-        // ------------------------------
-        // 2) アニメ FPS の決定
-        // ------------------------------
-        m.animationFps = MODEL_ANIMATION_FPS;
-
-        if (m.scene && m.scene->anim)
-        {
-            double begin = m.scene->anim->time_begin;
-            double end = m.scene->anim->time_end;
-
-            double sec = (end - begin);
-            int totalFrames = (int)std::round(sec * MODEL_ANIMATION_FPS);
-
-            m.animInfo.beginTime = begin;
-            m.animInfo.endTime = end;
-            m.animInfo.totalFrames = totalFrames;
-            m.animInfo.startFrame = 0;
-            m.animInfo.endFrame = totalFrames - 1;
-        }
-
-        // ------------------------------
-        // 3) メッシュ読み込み (UfbxStaticModel)
+        // UfbxStaticModel だけでシーンを読み込む
         // ------------------------------
         m.ufbx = std::make_unique<UfbxStaticModel>();
+
         if (!m.ufbx->Load(fbxPath))
         {
             m.used = false;
-            m.scene.reset();
             m.ufbx.reset();
             return -1;
         }
 
-        return (int)i;
+        // Transform を初期化（スケール1・回転0・位置0）
+        m.transform = Transform();
+
+        return (int)i; // ← モデル ID (handle)
     }
+
 
     return -1;
 }
@@ -193,6 +160,7 @@ void Model::DrawUfbx(int handle,const Transform& transform)
     m.ufbx->Draw(world, g_viewMatrix, g_projMatrix);
 }
 
+
 // ================================================================
 // UFBX 全体描画（view / proj を保存）
 // ================================================================
@@ -212,7 +180,7 @@ void Model::DrawUfbxAll(const XMMATRIX& view, const XMMATRIX& proj)
 //-------------------------------------------------------------
 // 単体描画（Transform 指定・フレーム指定）
 //-------------------------------------------------------------
-void DrawUfbx(int handle, const Transform& transform, int frame)
+void Model::DrawUfbx(int handle, const Transform& transform, int frame)
 {
     if (handle < 0) return;
     if (static_cast<size_t>(handle) >= g_models.size()) return;
@@ -222,7 +190,7 @@ void DrawUfbx(int handle, const Transform& transform, int frame)
 
     // Transform → ワールド行列
     DirectX::XMMATRIX world = transform.GetWorldMatrix();
-
+    
     // アニメーションが存在する場合のみ更新
     if (m.scene && m.scene->anim)
     {
@@ -244,6 +212,15 @@ void DrawUfbx(int handle, const Transform& transform, int frame)
 
     // 描画
     m.ufbx->Draw(world, g_viewMatrix, g_projMatrix);
+}
+
+void Model::DrawUfbx(int handle, int frame)
+{
+    if (handle < 0 || handle >= (int)g_models.size()) return;
+    auto& m = g_models[handle];
+    if (!m.used) return;
+
+    DrawUfbx(handle, m.transform, frame);
 }
 
 
