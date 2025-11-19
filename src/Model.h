@@ -91,6 +91,8 @@ namespace Model
     // スケルトン描画（同じく内部 view/proj 利用）
     void DrawSkeletonAll();
 
+	void SetViewProj(const DirectX::XMMATRIX& view, const DirectX::XMMATRIX& proj);
+
     // レイキャスト
     void RayCast(int handle, RayCastData* data);
 }

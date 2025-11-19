@@ -265,6 +265,13 @@ void Model::DrawSkeletonAll()
     }
 }
 
+void Model::SetViewProj(const DirectX::XMMATRIX& view, const DirectX::XMMATRIX& proj)
+{
+    g_viewMatrix = view;
+    g_projMatrix = proj;
+	g_hasViewProj = true;
+}
+
 // ================================================================
 // RayCast（未実装のダミー）
 // ================================================================

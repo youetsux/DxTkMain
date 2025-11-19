@@ -2,8 +2,10 @@
 #define NOMINMAX
 #include <windows.h>
 #include <DirectXMath.h>
-#include "Dice.h"
+//#include "Dice.h"
 #include "App.h"
+#include "Model.h"
+
 
 using namespace DirectX;
 
@@ -23,17 +25,19 @@ void App::Initialize(HWND hwnd, unsigned w, unsigned h)
 
     // 4) カメラ初期化（ページ準拠API）
     Camera::Initialize();
-    Camera::SetPerspective(XM_PIDIV4, float(w) / float(h));
-    Camera::SetPosition(XMVectorSet(0, 3, -3, 0));
-    Camera::SetTarget(XMVectorSet(0, 0, 0, 0));
+    Camera::SetPerspective(XMConvertToRadians(40.0f), float(w) / float(h));
+    Camera::SetPosition(XMVectorSet(0, 70, -200, 0));
+    Camera::SetTarget(XMVectorSet(0, 70, 0, 0));
 
 
     //m_quad.LoadTexture(".\\Assets\\Dice.png");
     //m_quad.Initialize();
 
-    m_dice.Initialize();
-	m_dice.LoadTexture(L".\\Assets\\Dice.png");
+ //   m_dice.Initialize();
+	//m_dice.LoadTexture(L".\\Assets\\Dice.png");
 
+	Model::Initialize(2);
+	hModel = Model::LoadUfbx(".\\Assets\\GS_MotionSet.fbx");
 
     m_ready = true;
 }
@@ -56,7 +60,7 @@ void App::Update()
     if (!m_ready) return;
 
     // デモ用途：回転角を更新（必要なければ削除OK）
-    m_angle += dt * XM_PIDIV4; // 45°/s
+    m_angle += dt * 10.0f; // 45°/s
 }
 
 void App::Render()
@@ -78,8 +82,18 @@ void App::Render()
 
     //// 引数なし版を採用しているなら：m_quad.Draw(WVP);
     //m_quad.Draw( WVP);
-    m_dice.Draw(Wy, V, P);
+    //m_dice.Draw(Wy, V, P);
+	Transform t;
+	t.position_ = { 0.0f,0.0f,0.0};
+	t.rotate_ = { 0.0f, m_angle, 0.0f};
+	t.scale_ = { 1.0f, 1.0f, 1.0f};
+    //t.Calclation();
+	Model::SetViewProj(V, P);
     
+    Model::SetTransform(hModel, t);
+	//Model::DrawUfbx(hModel);
+	Model::DrawUfbxAll(V,P);
+
     m_renderer.EndFrame();
     m_renderer.Present();
 }
