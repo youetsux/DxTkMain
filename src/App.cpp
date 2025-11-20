@@ -26,8 +26,8 @@ void App::Initialize(HWND hwnd, unsigned w, unsigned h)
     // 4) カメラ初期化（ページ準拠API）
     Camera::Initialize();
     Camera::SetPerspective(XMConvertToRadians(40.0f), float(w) / float(h));
-    Camera::SetPosition(XMVectorSet(0, 70, -200, 0));
-    Camera::SetTarget(XMVectorSet(0, 70, 0, 0));
+    Camera::SetPosition(XMVectorSet(0, 90, -300, 0));
+    Camera::SetTarget(XMVectorSet(0, 90, 0, 0));
 
 	Model::Initialize(2);
 	hModel = Model::LoadUfbx(".\\Assets\\GS_MotionSet.fbx");
@@ -79,7 +79,7 @@ void App::Render()
 
     static int fr = 0;
 	Model::DrawUfbx(hModel, t, ++fr); // フレーム指定デモ
-
+    
     m_renderer.EndFrame();
     m_renderer.Present();
 }

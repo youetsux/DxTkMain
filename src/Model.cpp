@@ -191,6 +191,7 @@ void Model::DrawUfbx(int handle, const Transform& transform, int frame)
 
     // UfbxStaticModel 内部のデフォルトアニメを取得
     const ufbx_anim* anim = m.ufbx->GetDefaultAnim();
+    
     if (anim)
     {
         const double fps = MODEL_ANIMATION_FPS; // 60.0f defined in this file
