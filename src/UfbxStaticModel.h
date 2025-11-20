@@ -168,6 +168,13 @@ public:
     // アニメーションスタック名指定で更新
     void UpdateSkeletonAtTime(const ufbx_scene* scene, const std::string& stack_name, double t_sec);
 
+    // 公開ラッパ：内部の scene_ を使ってデフォルトアニメ（scene->anim）で更新
+    void UpdateSkeletonAtTime(double t_sec);
+
+    // 公開アクセサ：内部シーンのデフォルト anim（nullptr 可能）を取得
+    const ufbx_anim* GetDefaultAnim() const;
+
+
     // ------------------------------------------------------------
     // FBX シーン読み込み（ufbx のラッパ）
     // ・呼び出し側は unique_ptr<ufbx_scene> を受け取れる

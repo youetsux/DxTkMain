@@ -598,6 +598,18 @@ void UfbxStaticModel::UpdateSkeletonAtTime(
     }
 }
 
+
+// internal scene_ を使うラッパ実装
+void UfbxStaticModel::UpdateSkeletonAtTime(double t_sec)
+{
+    UpdateSkeletonAtTime(scene_.get(), t_sec);
+}
+
+const ufbx_anim* UfbxStaticModel::GetDefaultAnim() const
+{
+    return scene_ ? scene_.get()->anim : nullptr;
+}
+
 //================================================================
 // メッシュ展開（CPU）
 // ・FBX のデータ構造（faces / vertex_position / uv 等）から

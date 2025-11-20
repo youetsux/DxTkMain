@@ -1,6 +1,6 @@
 ﻿#include "Model.h"
 #include "Gfx.h"
-
+#include <algorithm>
 #include <vector>
 #include <cmath>
 #include <cstring>
@@ -53,7 +53,6 @@ void Model::AllRelease()
     {
         m.used = false;
         m.ufbx.reset();
-        ///m.scene.reset();
     }
 }
 
@@ -68,13 +67,12 @@ void Model::Delete(int handle)
 
     m.used = false;
     m.ufbx.reset();
-    //m.scene.reset();
 }
 
 // ================================================================
 // Transform 設定
 // ================================================================
-void Model::SetTransform(int handle,const Transform& transform)
+void Model::SetTransform(int handle, const Transform& transform)
 {
     if (handle < 0 || handle >= (int)g_models.size()) return;
     g_models[handle].transform = transform;
@@ -148,7 +146,7 @@ void Model::DrawUfbx(int handle)
 // ================================================================
 // Transform を指定して描画
 // ================================================================
-void Model::DrawUfbx(int handle,const Transform& transform)
+void Model::DrawUfbx(int handle, const Transform& transform)
 {
     if (!g_initialized || !g_hasViewProj) return;
     if (handle < 0 || handle >= (int)g_models.size()) return;
@@ -190,24 +188,19 @@ void Model::DrawUfbx(int handle, const Transform& transform, int frame)
 
     // Transform → ワールド行列
     DirectX::XMMATRIX world = transform.GetWorldMatrix();
-    
-    // アニメーションが存在する場合のみ更新
-    if (m.scene && m.scene->anim)
+
+    // UfbxStaticModel 内部のデフォルトアニメを取得
+    const ufbx_anim* anim = m.ufbx->GetDefaultAnim();
+    if (anim)
     {
-        const ufbx_anim* anim = m.scene->anim;
-
-        // FPS（固定 60）
-        const double fps = MODEL_ANIMATION_FPS;
-
-        // frame → 秒変換
+        const double fps = MODEL_ANIMATION_FPS; // 60.0f defined in this file
         double t_sec = anim->time_begin + (frame / fps);
 
-        // アニメ時間を Clamp
-        if (t_sec < anim->time_begin) t_sec = anim->time_begin;
-        if (t_sec > anim->time_end)   t_sec = anim->time_end;
+        // Clamp
+        t_sec = std::clamp(t_sec, anim->time_begin, anim->time_end);
 
-        // スケルトン更新
-        m.ufbx->UpdateSkeletonAtTime(m.scene.get(), anim, t_sec);
+        // 内部シーンを使ってスケルトンを更新するラッパを呼ぶ
+        m.ufbx->UpdateSkeletonAtTime(t_sec);
     }
 
     // 描画
@@ -246,7 +239,7 @@ void Model::SetViewProj(const DirectX::XMMATRIX& view, const DirectX::XMMATRIX& 
 {
     g_viewMatrix = view;
     g_projMatrix = proj;
-	g_hasViewProj = true;
+    g_hasViewProj = true;
 }
 
 // ================================================================

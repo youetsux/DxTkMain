@@ -47,8 +47,8 @@ namespace Model
         std::unique_ptr<UfbxStaticModel> ufbx;
 
         // FBX 生シーンデータ（削除子 ufbx_free_scene）
-        std::unique_ptr<ufbx_scene, void(*)(ufbx_scene*)> scene =
-            std::unique_ptr<ufbx_scene, void(*)(ufbx_scene*)>(nullptr, ufbx_free_scene);
+        //std::unique_ptr<ufbx_scene, void(*)(ufbx_scene*)> scene =
+        //    std::unique_ptr<ufbx_scene, void(*)(ufbx_scene*)>(nullptr, ufbx_free_scene);
 
         float animationFps = 60.0f; // 後で上書き
 
@@ -68,7 +68,7 @@ namespace Model
     int LoadUfbx(const char* fbxPath);
 
     // Transform 設定
-    void SetTransform(int handle,const Transform& transform);
+    void SetTransform(int handle, const Transform& transform);
 
     // Transform → 行列
     DirectX::XMMATRIX GetMatrix(int handle);
@@ -77,8 +77,8 @@ namespace Model
     void DrawUfbx(int handle);
 
     // Transform を都度指定して描画
-    void DrawUfbx(int handle,const Transform& transform);
-    
+    void DrawUfbx(int handle, const Transform& transform);
+
     // フレーム指定（基本）
     void DrawUfbx(int handle, const Transform& transform, int frame);
 
@@ -91,7 +91,7 @@ namespace Model
     // スケルトン描画（同じく内部 view/proj 利用）
     void DrawSkeletonAll();
 
-	void SetViewProj(const DirectX::XMMATRIX& view, const DirectX::XMMATRIX& proj);
+    void SetViewProj(const DirectX::XMMATRIX& view, const DirectX::XMMATRIX& proj);
 
     // レイキャスト
     void RayCast(int handle, RayCastData* data);
