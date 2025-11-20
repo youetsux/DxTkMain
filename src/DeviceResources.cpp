@@ -94,5 +94,5 @@ void DeviceResources::WindowSizeChanged(unsigned int w, unsigned int h)
 
 void DeviceResources::Present()
 {
-    m_swapChain->Present(1, 0);
+    m_swapChain->Present(0, 0);
 }
