@@ -1,0 +1,2 @@
+Texture report (fbx_dir: .\Assets)
+idx | name | embedded_bytes | external_exists | external_size_bytes

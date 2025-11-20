@@ -1,0 +1,7 @@
+ufbx_scene memory report
+textures: 0 (embedded bytes: 0)
+meshes: 1
+approx mesh vertex arrays bytes: 36960
+approx mesh index arrays bytes: 1680
+nodes: 5
+anim stacks: 1

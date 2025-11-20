@@ -1,0 +1,4 @@
+[2025-11-20 17:43:39] After CreateEffectsAndTextures WorkingSet=532028 KB PrivateBytes=637624 KB
+[2025-11-20 17:44:12] After CreateEffectsAndTextures WorkingSet=532024 KB PrivateBytes=637672 KB
+[2025-11-20 17:44:23] After CreateEffectsAndTextures WorkingSet=531668 KB PrivateBytes=637364 KB
+[2025-11-20 17:50:31] After CreateEffectsAndTextures WorkingSet=46252 KB PrivateBytes=62364 KB

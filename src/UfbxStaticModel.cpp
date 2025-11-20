@@ -293,6 +293,8 @@ namespace
         return xm_world;
     }
 
+
+
     // ------------------------------------------------------------
     // ボーン登録ヘルパ
     // ・ufbx_node を SkeletonData に追加し、そのインデックスを返す
@@ -328,6 +330,20 @@ namespace
 UfbxStaticModel::UfbxStaticModel()
 {
 }
+
+
+// 追加するコード（そのままコピペ）
+void UfbxStaticModel::UpdateSkeletonAtTime(double t_sec)
+{
+    // 内部で管理している scene_ と既存のオーバーロードを使うラッパ
+    UpdateSkeletonAtTime(scene_.get(), t_sec);
+}
+
+const ufbx_anim* UfbxStaticModel::GetDefaultAnim() const
+{
+    return scene_ ? scene_.get()->anim : nullptr;
+}
+
 
 //================================================================
 // シーン読み込み
@@ -393,6 +409,9 @@ bool UfbxStaticModel::Load(const char* fbx_path)
     if (!CreateEffectsAndTextures(fbx_path, scene_.get())) {
         return false;
     }
+
+    // CPU 側の一次頂点データを解放（冗長コピーを減らす）
+    std::vector<VertexPNT2>().swap(mesh_.vertices_);
 
     return true;
 }
@@ -596,18 +615,6 @@ void UfbxStaticModel::UpdateSkeletonAtTime(
         skeleton_.curr_world_[i] =
             EvaluateNodeWorldRecursive(node, anim, t, cache);
     }
-}
-
-
-// internal scene_ を使うラッパ実装
-void UfbxStaticModel::UpdateSkeletonAtTime(double t_sec)
-{
-    UpdateSkeletonAtTime(scene_.get(), t_sec);
-}
-
-const ufbx_anim* UfbxStaticModel::GetDefaultAnim() const
-{
-    return scene_ ? scene_.get()->anim : nullptr;
 }
 
 //================================================================
