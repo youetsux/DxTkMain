@@ -12,316 +12,11 @@
 #include <WICTextureLoader.h>
 #include "Gfx.h"
 #include "ufbx.h"
+#include "Utils.h"
 
 
 using Microsoft::WRL::ComPtr;
 
-// 無名名前空間
-// ・この cpp ファイルの中だけで使う関数・構造体を閉じ込める場所
-// ・外からは見えない（static と似た効果）
-namespace
-{
-    using namespace DirectX;
-    namespace fs = std::filesystem;
-
-    // ------------------------------------------------------------
-    // デバッグ用頂点（ボーン表示のライン描画に使う）
-    // ------------------------------------------------------------
-    struct DebugVC
-    {
-        XMFLOAT3 pos; // 頂点位置
-        XMFLOAT4 col; // 頂点カラー（RGBA）
-    };
-
-    // ------------------------------------------------------------
-    // UTF-8 → std::filesystem::path 変換
-    // ・FBX 内の文字列は UTF-8 なので、それを path に変換する
-    // ------------------------------------------------------------
-    fs::path PathFromUtf8(const char* bytes, size_t len)
-    {
-        const char8_t* p = reinterpret_cast<const char8_t*>(bytes);
-        return fs::path(std::u8string(p, p + len));
-    }
-
-    // ufbx_string からパスを作る
-    fs::path PathFromUfbx(const ufbx_string& s)
-    {
-        if (!s.data || s.length == 0) return fs::path();
-        return PathFromUtf8(s.data, s.length);
-    }
-
-    // ufbx_string から「ファイル名だけ」取り出す
-    fs::path FileNameFromUfbx(const ufbx_string& s)
-    {
-        return PathFromUfbx(s).filename();
-    }
-
-    // ------------------------------------------------------------
-    // ufbx_string の内容比較
-    // ・長さと中身のバイト列を比較する
-    // ------------------------------------------------------------
-    bool UfbxStringEquals(const ufbx_string& a, const ufbx_string& b)
-    {
-        if (a.length != b.length || !a.data || !b.data) return false;
-        return std::strncmp(a.data, b.data, a.length) == 0;
-    }
-
-    // ------------------------------------------------------------
-    // Diffuse 相当のテクスチャを取得
-    // ・PBR, FBX の両方のプロパティを見て「メインカラー用テクスチャ」を探す
-    // ------------------------------------------------------------
-    const ufbx_texture* GetDiffuseTexture(const ufbx_material* mat)
-    {
-        if (!mat) return nullptr;
-        if (mat->pbr.base_color.texture)    return mat->pbr.base_color.texture;
-        if (mat->fbx.diffuse_color.texture) return mat->fbx.diffuse_color.texture;
-        if (mat->fbx.ambient_color.texture) return mat->fbx.ambient_color.texture;
-        return nullptr;
-    }
-
-    // ------------------------------------------------------------
-    // UV セット名から vertex_uv を取得
-    // ・Maya などで複数 UV セットを持つ場合に、テクスチャが参照している
-    //   UV セットを見つけるために使う
-    // ------------------------------------------------------------
-    const ufbx_vertex_vec2* ResolveUVByName(
-        const ufbx_mesh* mesh,
-        const ufbx_string& uv_set_name)
-    {
-        if (!mesh || uv_set_name.length == 0) return nullptr;
-
-        size_t i;
-        for (i = 0; i < mesh->uv_sets.count; ++i) {
-            const ufbx_uv_set& us = mesh->uv_sets.data[i];
-            if (us.vertex_uv.exists && UfbxStringEquals(us.name, uv_set_name)) {
-                return &us.vertex_uv;
-            }
-        }
-        return nullptr;
-    }
-
-    // ------------------------------------------------------------
-    // ufbx 属性のインデックス解決
-    // ・FBX は「頂点ごと」「コーナーごと」などいろいろな持ち方をする
-    // ・どの index を見ればいいかをここで統一して決める
-    // ------------------------------------------------------------
-    template<typename AttrT>
-    uint32_t ValueIndexOf(const AttrT& attr, uint32_t corner, uint32_t vtx)
-    {
-        // 別の indices 配列を持っている場合
-        if (attr.indices.count > 0)  return attr.indices.data[corner];
-        // 頂点ごとに一意な場合
-        if (attr.unique_per_vertex)  return vtx;
-        // それ以外は corner 番号をそのまま使う
-        return corner;
-    }
-
-    // ------------------------------------------------------------
-    // ufbx_matrix → XMFLOAT4X4 変換
-    // ・ufbx の行列を DirectX 用の行列に詰め替える
-    // ------------------------------------------------------------
-    DirectX::XMFLOAT4X4 ToXMMatrix(const ufbx_matrix& m)
-    {
-        DirectX::XMFLOAT4X4 out;
-
-        // 転置＋行列レイアウトの都合で入れ替えている
-        out._11 = (float)m.m00; out._12 = (float)m.m10; out._13 = (float)m.m20; out._14 = 0.0f;
-        out._21 = (float)m.m01; out._22 = (float)m.m11; out._23 = (float)m.m21; out._24 = 0.0f;
-        out._31 = (float)m.m02; out._32 = (float)m.m12; out._33 = (float)m.m22; out._34 = 0.0f;
-        out._41 = (float)m.m03; out._42 = (float)m.m13; out._43 = (float)m.m23; out._44 = 1.0f;
-
-        return out;
-    }
-
-    // 位置ベクトルを行列 M で変換
-    XMVECTOR TransformPosition(const XMFLOAT3& p, const XMMATRIX& M)
-    {
-        return XMVector3Transform(XMLoadFloat3(&p), M);
-    }
-
-    // 法線ベクトルを行列 M で変換（平行移動の影響は受けない）
-    XMVECTOR TransformNormal(const XMFLOAT3& n, const XMMATRIX& M)
-    {
-        return XMVector3TransformNormal(XMLoadFloat3(&n), M);
-    }
-
-    // ------------------------------------------------------------
-    // ボーンウェイトのソート用
-    // ・std::sort の比較関数（重い順に並べる）
-    // ------------------------------------------------------------
-    bool CompareBoneWeightPair(
-        const std::pair<uint16_t, float>& a,
-        const std::pair<uint16_t, float>& b)
-    {
-        return a.second > b.second;
-    }
-
-    // ------------------------------------------------------------
-    // CPU スキニング
-    // ・各頂点について、ボーン行列とウェイトを使って新しい位置と法線を計算
-    // ・GPU スキニングではなく、CPU で計算して VB を更新する方式
-    // ------------------------------------------------------------
-    void ApplySkinCPU(
-        const std::vector<XMMATRIX>& skin_mats,
-        const std::vector<UfbxStaticModel::VertexInfluence>& influences,
-        const std::vector<UfbxStaticModel::VertexPNT2>& bind_vertices,
-        std::vector<UfbxStaticModel::VertexPNT2>& out_vertices)
-    {
-        size_t n = bind_vertices.size();
-        out_vertices.resize(n);
-
-        size_t v;
-        for (v = 0; v < n; ++v) {
-            const UfbxStaticModel::VertexInfluence& inf = influences[v];
-
-            XMVECTOR P = XMVectorZero(); // 合成された位置
-            XMVECTOR N = XMVectorZero(); // 合成された法線
-            bool any = false;            // 1つでも有効なボーンがあったか
-
-            int k;
-            for (k = 0; k < 4; ++k) {
-                float w = inf.weight[k];
-                uint16_t b = inf.bone[k];
-
-                if (w <= 0.0f) continue;              // ウェイト0は無視
-                if (b >= skin_mats.size()) continue; // 不正なボーン番号も無視
-
-                const XMMATRIX& B = skin_mats[b];
-                XMVECTOR W = XMVectorReplicate(w);   // w → {w,w,w,w}
-
-                // P += (B * pos) * w
-                P = XMVectorMultiplyAdd(
-                    TransformPosition(bind_vertices[v].pos, B),
-                    W, P);
-                // N += (B * nrm) * w
-                N = XMVectorMultiplyAdd(
-                    TransformNormal(bind_vertices[v].nrm, B),
-                    W, N);
-
-                any = true;
-            }
-
-            // どのボーンからも影響がなければ、元の頂点を使う
-            if (!any) {
-                out_vertices[v] = bind_vertices[v];
-                continue;
-            }
-
-            // 合成結果を構造体に書き戻す
-            UfbxStaticModel::VertexPNT2 sv = bind_vertices[v];
-            XMStoreFloat3(&sv.pos, P);
-            N = XMVector3Normalize(N);
-            XMStoreFloat3(&sv.nrm, N);
-            out_vertices[v] = sv;
-        }
-    }
-
-    // ------------------------------------------------------------
-    // 骨の位置/変換ヘルパ（DrawSkeleton で使う）
-    // ------------------------------------------------------------
-    DirectX::XMFLOAT3 GetBonePosition(const DirectX::XMFLOAT4X4& M)
-    {
-        // 行列の第4行の xyz が平行移動成分
-        DirectX::XMFLOAT3 p;
-        p.x = M._41;
-        p.y = M._42;
-        p.z = M._43;
-        return p;
-    }
-
-    // 任意の点 v を行列 M で変換
-    DirectX::XMFLOAT3 TransformPoint(
-        const DirectX::XMFLOAT4X4& M,
-        const DirectX::XMFLOAT3& v)
-    {
-        using namespace DirectX;
-
-        XMMATRIX mat = XMLoadFloat4x4(&M);
-        XMVECTOR p = XMVector3Transform(XMLoadFloat3(&v), mat);
-        XMFLOAT3 out;
-        XMStoreFloat3(&out, p);
-        return out;
-    }
-
-    // ------------------------------------------------------------
-    // node_to_world(t) 再帰ヘルパ
-    // ・指定ノードの「アニメーション適用後のワールド行列」を計算する
-    // ・親がいれば親のワールド行列も再帰的に計算
-    // ・計算済みは cache に保存して再利用
-    // ------------------------------------------------------------
-    DirectX::XMFLOAT4X4 EvaluateNodeWorldRecursive(
-        const ufbx_node* node,
-        const ufbx_anim* anim,
-        double t,
-        std::unordered_map<const ufbx_node*, DirectX::XMFLOAT4X4>& cache)
-    {
-        using namespace DirectX;
-
-        // すでに計算済みならキャッシュから返す
-        std::unordered_map<const ufbx_node*, XMFLOAT4X4>::iterator it =
-            cache.find(node);
-        if (it != cache.end()) {
-            return it->second;
-        }
-
-        // ローカル変換を取得
-        ufbx_transform xf = ufbx_evaluate_transform(anim, node, t);
-        ufbx_matrix    lm = ufbx_transform_to_matrix(&xf);
-        XMFLOAT4X4     xm_local = ToXMMatrix(lm);
-        XMMATRIX       L = XMLoadFloat4x4(&xm_local);
-
-        XMMATRIX W;
-
-        if (node->parent) {
-            // 親がいれば親のワールド行列を先に計算
-            XMFLOAT4X4 parent_world =
-                EvaluateNodeWorldRecursive(node->parent, anim, t, cache);
-            XMMATRIX PW = XMLoadFloat4x4(&parent_world);
-            // 前の実装と同じ掛け順に合わせる
-            W = L * PW;
-        }
-        else {
-            // ルートノードはローカル = ワールド
-            W = L;
-        }
-
-        XMFLOAT4X4 xm_world;
-        XMStoreFloat4x4(&xm_world, W);
-
-        // キャッシュに保存
-        cache.insert(std::make_pair(node, xm_world));
-        return xm_world;
-    }
-
-
-
-    // ------------------------------------------------------------
-    // ボーン登録ヘルパ
-    // ・ufbx_node を SkeletonData に追加し、そのインデックスを返す
-    // ・すでに登録されている場合は既存のインデックスを返す
-    // ------------------------------------------------------------
-    int AddBoneInternal(
-        const ufbx_node* node,
-        UfbxStaticModel::SkeletonData& skeleton,
-        std::unordered_map<const ufbx_node*, int>& index_of)
-    {
-        // すでに登録済みかチェック
-        std::unordered_map<const ufbx_node*, int>::iterator it =
-            index_of.find(node);
-        if (it != index_of.end()) {
-            return it->second;
-        }
-
-        // 新しいボーンとして追加
-        int idx = static_cast<int>(skeleton.bones_.size());
-        index_of.insert(std::make_pair(node, idx));
-
-        UfbxStaticModel::BoneInfo info;
-        info.node = node;
-        skeleton.bones_.push_back(info);
-        return idx;
-    }
-} // anonymous namespace
 
 //================================================================
 // コンストラクタ
@@ -383,10 +78,6 @@ bool UfbxStaticModel::LoadScene(
 //================================================================
 bool UfbxStaticModel::Load(const char* fbx_path)
 {
-    // ufbx_scene を unique_ptr で管理（最初は nullptr）
-    //std::unique_ptr<ufbx_scene, void(*)(ufbx_scene*)> scene(
-    //    nullptr, ufbx_free_scene);
-
     // シーン読み込み
     if (!LoadScene(fbx_path, scene_)) {
         return false;
@@ -461,7 +152,7 @@ bool UfbxStaticModel::BuildSkeletonFromScene(const ufbx_scene* scene)
 
                 // ボーン側のバインド姿勢（ボーンのワールド行列）
                 skeleton_.bones_[bi].bind_world =
-                    ToXMMatrix(cl->bind_to_world);
+                    UfbxUtil::ToXMMatrix(cl->bind_to_world);
 
                 // バインド姿勢の逆行列も作っておく
                 {
@@ -474,7 +165,7 @@ bool UfbxStaticModel::BuildSkeletonFromScene(const ufbx_scene* scene)
 
                 // ジオメトリ → ボーン の変換行列
                 skeleton_.bones_[bi].geom_bind_world =
-                    ToXMMatrix(cl->geometry_to_bone);
+                    UfbxUtil::ToXMMatrix(cl->geometry_to_bone);
 
                 // その逆行列
                 {
@@ -613,7 +304,7 @@ void UfbxStaticModel::UpdateSkeletonAtTime(
 
         // ボーンに対応するノードのワールド行列を求める
         skeleton_.curr_world_[i] =
-            EvaluateNodeWorldRecursive(node, anim, t, cache);
+            UfbxUtil::EvaluateNodeWorldRecursive(node, anim, t, cache);
     }
 }
 
@@ -756,7 +447,7 @@ void UfbxStaticModel::ExpandAllNodes(const ufbx_scene* scene)
 
             MeshPart part;
             // 一度 null で初期化しておき、あとで正しいマテリアルをセット
-            //part.mat = GetDiffuseTexture(nullptr) ? nullptr : nullptr; // 初期値
+            //part.mat = UfbxUtil::GetDiffuseTexture(nullptr) ? nullptr : nullptr; // 初期値
             part.mat = nullptr;
             part.start_index = (uint32_t)mesh_.indices_.size();
 
@@ -776,11 +467,11 @@ void UfbxStaticModel::ExpandAllNodes(const ufbx_scene* scene)
             }
 
             // UV セットをテクスチャに合わせて選び直す
-            const ufbx_texture* tex_for_uv = GetDiffuseTexture(part.mat);
+            const ufbx_texture* tex_for_uv = UfbxUtil::GetDiffuseTexture(part.mat);
             const ufbx_vertex_vec2* uvv = base_uv;
             if (tex_for_uv && tex_for_uv->uv_set.length > 0) {
                 const ufbx_vertex_vec2* alt =
-                    ResolveUVByName(mesh, tex_for_uv->uv_set);
+                    UfbxUtil::ResolveUVByName(mesh, tex_for_uv->uv_set);
                 if (alt && alt->exists) {
                     uvv = alt;
                 }
@@ -808,7 +499,7 @@ void UfbxStaticModel::ExpandAllNodes(const ufbx_scene* scene)
 
                         // 位置
                         uint32_t pi =
-                            ValueIndexOf(mesh->vertex_position, corner, vtx);
+                            UfbxUtil::ValueIndexOf(mesh->vertex_position, corner, vtx);
                         ufbx_vec3 p =
                             mesh->vertex_position.values.data[pi];
                         XMFLOAT3 P;
@@ -829,7 +520,7 @@ void UfbxStaticModel::ExpandAllNodes(const ufbx_scene* scene)
                         N.x = 0.0f; N.y = 1.0f; N.z = 0.0f;
                         if (mesh->vertex_normal.exists) {
                             uint32_t ni2 =
-                                ValueIndexOf(mesh->vertex_normal, corner, vtx);
+                                UfbxUtil::ValueIndexOf(mesh->vertex_normal, corner, vtx);
                             ufbx_vec3 n =
                                 mesh->vertex_normal.values.data[ni2];
 
@@ -848,7 +539,7 @@ void UfbxStaticModel::ExpandAllNodes(const ufbx_scene* scene)
                         T.x = 0.0f; T.y = 0.0f;
                         if (uvv && uvv->exists) {
                             uint32_t ti =
-                                ValueIndexOf(*uvv, corner, vtx);
+                                UfbxUtil::ValueIndexOf(*uvv, corner, vtx);
                             ufbx_vec2 t =
                                 uvv->values.data[ti];
                             T.x = (float)t.x;
@@ -1022,7 +713,7 @@ bool UfbxStaticModel::CreateEffectsAndTextures(
     fs::path fbx_dir;
     if (fbx_path) {
         size_t len = std::strlen(fbx_path);
-        fbx_dir = PathFromUtf8(fbx_path, len).parent_path();
+        fbx_dir = UfbxUtil::PathFromUtf8(fbx_path, len).parent_path();
     }
 
     // 各 MeshPart のテクスチャを作成
@@ -1030,7 +721,7 @@ bool UfbxStaticModel::CreateEffectsAndTextures(
     for (i = 0; i < mesh_.parts_.size(); ++i) {
         MeshPart& part = mesh_.parts_[i];
 
-        const ufbx_texture* tex = GetDiffuseTexture(part.mat);
+        const ufbx_texture* tex = UfbxUtil::GetDiffuseTexture(part.mat);
         if (!tex) continue;
 
         HRESULT hr = E_FAIL;
@@ -1047,7 +738,7 @@ bool UfbxStaticModel::CreateEffectsAndTextures(
         }
         // ファイル名だけ（外部ファイル）の場合
         else if (tex->filename.length > 0 && tex->filename.data) {
-            fs::path tex_path = fbx_dir / FileNameFromUfbx(tex->filename);
+            fs::path tex_path = fbx_dir / UfbxUtil::FileNameFromUfbx(tex->filename);
             if (fs::exists(tex_path)) {
                 hr = DirectX::CreateWICTextureFromFile(
                     device,
@@ -1255,11 +946,11 @@ void UfbxStaticModel::DrawSkeleton(
 
         // ボーンの軸（X,Y,Z）を描く
         XMFLOAT3 o = GetBonePosition(Wi);
-        XMFLOAT3 x1 = TransformPoint(
+        XMFLOAT3 x1 = UfbxUtil::TransformPoint(
             Wi, XMFLOAT3(axis_len, 0, 0));
-        XMFLOAT3 y1 = TransformPoint(
+        XMFLOAT3 y1 = UfbxUtil::TransformPoint(
             Wi, XMFLOAT3(0, axis_len, 0));
-        XMFLOAT3 z1 = TransformPoint(
+        XMFLOAT3 z1 = UfbxUtil::TransformPoint(
             Wi, XMFLOAT3(0, 0, axis_len));
 
         lines.push_back(DebugVC{ o,  col_x }); lines.push_back(DebugVC{ x1, col_x });
