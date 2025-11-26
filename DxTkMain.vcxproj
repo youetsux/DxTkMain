@@ -142,6 +142,7 @@
     <ClCompile Include="src\Transform.cpp" />
     <ClCompile Include="src\ufbx.c" />
     <ClCompile Include="src\UfbxStaticModel.cpp" />
+    <ClCompile Include="src\UfbxStaticModel_Mesh.cpp" />
     <ClCompile Include="src\UfbxUtil.cpp" />
   </ItemGroup>
   <ItemGroup>

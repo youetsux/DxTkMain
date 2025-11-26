@@ -4,14 +4,14 @@
 #include <unordered_map>
 #include "ufbx.h"
 
-#include <DirectXMath.h>
 
-namespace fs = std::filesystem;
-using namespace DirectX;
+
+
 
 namespace UfbxUtil
 {
-
+    namespace fs = std::filesystem;
+    using namespace DirectX;
     // path / string utilities
     fs::path PathFromUtf8(const char* bytes, size_t len);
     fs::path PathFromUfbx(const ufbx_string& s);
