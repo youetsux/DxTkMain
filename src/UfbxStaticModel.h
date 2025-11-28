@@ -10,6 +10,7 @@
 #include <Effects.h>
 #include <CommonStates.h>
 #include "ufbx.h"
+#include "FbxSkeleton.h"
 
 // ufbx を前方宣言（ヘッダに直接依存しないようにする）
 struct ufbx_scene;
@@ -75,48 +76,9 @@ public:
         Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> srv;
     };
 
-    // ------------------------------------------------------------
-    // ボーン1本分の情報
-    // ・どの ufbx_node に対応しているか
-    // ・親ボーンのインデックス
-    // ・バインドポーズ（初期姿勢）の行列
-    // ------------------------------------------------------------
-    struct BoneInfo
-    {
-        const ufbx_node* node = nullptr; // このボーンに対応する ufbx のノード
-        int              parent = -1;    // 親ボーンのインデックス（なければ -1）
 
-        DirectX::XMFLOAT4X4 bind_world{};       // ボーンのバインド姿勢のワールド行列
-        DirectX::XMFLOAT4X4 inv_bind_world{};   // 上の逆行列
-        DirectX::XMFLOAT4X4 geom_bind_world{};  // ジオメトリ → ボーン の変換行列
-        DirectX::XMFLOAT4X4 inv_geom_bind_world{}; // その逆行列
-    };
 
-    // ------------------------------------------------------------
-    // スケルトン全体のデータ
-    // ・ボーン配列
-    // ・現在のボーンのワールド行列（アニメーションで変化）
-    // ・u fbx のノード → ボーン番号へのマップ
-    // ・スキニング用の行列キャッシュ
-    // ------------------------------------------------------------
-    struct SkeletonData
-    {
-        // 全ボーンの情報（配列のインデックス = ボーン番号）
-        std::vector<BoneInfo>                      bones_;
-
-        // 現在時刻 t におけるボーンのワールド行列（node_to_world(t)）
-        std::vector<DirectX::XMFLOAT4X4>           curr_world_;
-
-        // ufbx_node* からボーン番号（uint16_t）を引くための辞書
-        std::unordered_map<const ufbx_node*, uint16_t> bone_index_of_;
-
-        // CPU スキニングで使うスキン行列の配列（毎フレーム更新）
-        std::vector<DirectX::XMMATRIX>             skin_mats_;
-
-        // シーンのおおよその大きさ（半径）
-        // → ボーンのデバッグ描画で軸の長さを決めるために使う
-        float                                      scene_radius_ = 1.0f;
-    };
+ 
 
     // ------------------------------------------------------------
     // コンストラクタ（ここでは実体は作らない、初期値だけ）
@@ -154,25 +116,25 @@ public:
     // ------------------------------------------------------------
 
     // シーンからボーン情報を抽出して SkeletonData を構築
-    bool BuildSkeletonFromScene(const ufbx_scene* scene);
+    //bool BuildSkeletonFromScene(const ufbx_scene* scene);
 
     // デフォルトのアニメ（scene->anim）で時刻 t_sec の姿勢に更新
-    void UpdateSkeletonAtTime(const ufbx_scene* scene, double t_sec);
+    //void UpdateSkeletonAtTime(const ufbx_scene* scene, double t_sec);
 
     // 明示的に anim を指定して時刻 t_sec の姿勢に更新
-    void UpdateSkeletonAtTime(const ufbx_scene* scene, const ufbx_anim* anim, double t_sec);
+    //void UpdateSkeletonAtTime(const ufbx_scene* scene, const ufbx_anim* anim, double t_sec);
 
     // アニメーションスタックのインデックス指定で更新
-    void UpdateSkeletonAtTime(const ufbx_scene* scene, size_t stack_index, double t_sec);
+    //void UpdateSkeletonAtTime(const ufbx_scene* scene, size_t stack_index, double t_sec);
 
     // アニメーションスタック名指定で更新
-    void UpdateSkeletonAtTime(const ufbx_scene* scene, const std::string& stack_name, double t_sec);
+    //void UpdateSkeletonAtTime(const ufbx_scene* scene, const std::string& stack_name, double t_sec);
 
     // 公開ラッパ：内部の scene_ を使ってデフォルトアニメ（scene->anim）で更新
-    void UpdateSkeletonAtTime(double t_sec);
+    //void UpdateSkeletonAtTime(double t_sec);
 
     // 公開アクセサ：内部シーンのデフォルト anim（nullptr 可能）を取得
-    const ufbx_anim* GetDefaultAnim() const;
+   // const ufbx_anim* GetDefaultAnim() const;
 
 
     // ------------------------------------------------------------
@@ -248,7 +210,7 @@ private:
     // ------------------------------------------------------------
     // インスタンスが持つデータ
     // ------------------------------------------------------------
-    SkeletonData skeleton_;   // ボーン関連の全情報
+    FbxSkeleton skeleton_;   // ボーン関連の全情報
     MeshData     mesh_;       // メッシュ関連のCPU側データ
     DrawResources draw_;      // 描画に必要な DirectX リソース群
     std::unique_ptr<ufbx_scene, void(*)(ufbx_scene*)> scene_{ nullptr, ufbx_free_scene };

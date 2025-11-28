@@ -128,11 +128,11 @@
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="FileName.cpp" />
     <ClCompile Include="src\App.cpp" />
     <ClCompile Include="src\Camera.cpp" />
     <ClCompile Include="src\DeviceResources.cpp" />
     <ClCompile Include="src\Dice.cpp" />
+    <ClCompile Include="src\FbxSkeleton.cpp" />
     <ClCompile Include="src\Gfx.cpp" />
     <ClCompile Include="src\Main.cpp" />
     <ClCompile Include="src\Model.cpp" />
@@ -152,6 +152,7 @@
     <ClInclude Include="src\Camera.h" />
     <ClInclude Include="src\DeviceResources.h" />
     <ClInclude Include="src\Dice.h" />
+    <ClInclude Include="src\FbxSkeleton.h" />
     <ClInclude Include="src\Gfx.h" />
     <ClInclude Include="src\GfxState.h" />
     <ClInclude Include="src\Model.h" />

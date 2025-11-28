@@ -160,8 +160,8 @@ void UfbxStaticModel::ExpandAllNodes(const ufbx_scene* scene)
 
                     // このクラスターのボーンが SkeletonData にあるか調べる
                     std::unordered_map<const ufbx_node*, uint16_t>::iterator it =
-                        skeleton_.bone_index_of_.find(cl->bone_node);
-                    if (it == skeleton_.bone_index_of_.end()) {
+                        skeleton_.Data().bone_index_of_.find(cl->bone_node);
+                    if (it == skeleton_.Data().bone_index_of_.end()) {
                         continue;
                     }
 
@@ -567,20 +567,24 @@ void UfbxStaticModel::Draw(
 
     // CPU スキニング（ボーン情報とウェイトがある場合のみ）
     if (!mesh_.influences_.empty() && !mesh_.bind_vertices_.empty()) {
-        skeleton_.skin_mats_.resize(skeleton_.bones_.size());
+        skeleton_.SkinMatrices().resize(skeleton_.Bones().size());
+        //skeleton_.skin_mats_.resize(skeleton_.bones_.size());
 
         size_t i;
-        for (i = 0; i < skeleton_.bones_.size(); ++i) {
-            XMMATRIX W = XMLoadFloat4x4(&skeleton_.curr_world_[i]);
+        for (i = 0; i < skeleton_.Bones().size(); ++i) {
+            //XMMATRIX W = XMLoadFloat4x4(&skeleton_.curr_world_[i]);
+            XMMATRIX W = XMLoadFloat4x4(&skeleton_.CurrWorld()[i]);
+            //XMMATRIX G2B =
+            //    XMLoadFloat4x4(&skeleton_.bones_[i].geom_bind_world);
             XMMATRIX G2B =
-                XMLoadFloat4x4(&skeleton_.bones_[i].geom_bind_world);
+                XMLoadFloat4x4(&skeleton_.Bones()[i].geom_bind_world);
             // スキン行列 = 現在ボーン姿勢 × ジオメトリ→ボーン
-            skeleton_.skin_mats_[i] = XMMatrixMultiply(G2B, W);
+            skeleton_.SkinMatrices()[i] = XMMatrixMultiply(G2B, W);
         }
 
         // CPU でスキニングして頂点を更新
         ApplySkinCPU(
-            skeleton_.skin_mats_,
+            skeleton_.SkinMatrices(),
             mesh_.influences_,
             mesh_.bind_vertices_,
             mesh_.skinned_vertices_);
@@ -652,3 +656,4 @@ void UfbxStaticModel::Draw(
         prev_blend->Release();
     }
 }
+
