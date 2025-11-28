@@ -26,11 +26,11 @@ void App::Initialize(HWND hwnd, unsigned w, unsigned h)
     // 4) カメラ初期化（ページ準拠API）
     Camera::Initialize();
     Camera::SetPerspective(XMConvertToRadians(40.0f), float(w) / float(h));
-    Camera::SetPosition(XMVectorSet(0, 0, -10, 0));
-    Camera::SetTarget(XMVectorSet(0, 0, 0, 0));
+    Camera::SetPosition(XMVectorSet(0, 150, -300, 0));
+    Camera::SetTarget(XMVectorSet(0, 0, 150, 0));
 
 	Model::Initialize(2);
-	hModel = Model::LoadUfbx(".\\Assets\\Enemy.fbx");
+	hModel = Model::LoadUfbx(".\\Assets\\GS_MotionSet.fbx");
 
     m_ready = true;
 }
