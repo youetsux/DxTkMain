@@ -116,25 +116,25 @@ public:
     // ------------------------------------------------------------
 
     // シーンからボーン情報を抽出して SkeletonData を構築
-    //bool BuildSkeletonFromScene(const ufbx_scene* scene);
+    bool BuildSkeletonFromScene(const ufbx_scene* scene);
 
     // デフォルトのアニメ（scene->anim）で時刻 t_sec の姿勢に更新
-    //void UpdateSkeletonAtTime(const ufbx_scene* scene, double t_sec);
+    void UpdateSkeletonAtTime(const ufbx_scene* scene, double t_sec);
 
     // 明示的に anim を指定して時刻 t_sec の姿勢に更新
-    //void UpdateSkeletonAtTime(const ufbx_scene* scene, const ufbx_anim* anim, double t_sec);
+    void UpdateSkeletonAtTime(const ufbx_scene* scene, const ufbx_anim* anim, double t_sec);
 
     // アニメーションスタックのインデックス指定で更新
-    //void UpdateSkeletonAtTime(const ufbx_scene* scene, size_t stack_index, double t_sec);
+    void UpdateSkeletonAtTime(const ufbx_scene* scene, size_t stack_index, double t_sec);
 
     // アニメーションスタック名指定で更新
-    //void UpdateSkeletonAtTime(const ufbx_scene* scene, const std::string& stack_name, double t_sec);
+   void UpdateSkeletonAtTime(const ufbx_scene* scene, const std::string& stack_name, double t_sec);
 
     // 公開ラッパ：内部の scene_ を使ってデフォルトアニメ（scene->anim）で更新
-    //void UpdateSkeletonAtTime(double t_sec);
+    void UpdateSkeletonAtTime(double t_sec);
 
     // 公開アクセサ：内部シーンのデフォルト anim（nullptr 可能）を取得
-   // const ufbx_anim* GetDefaultAnim() const;
+    const ufbx_anim* GetDefaultAnim() const;
 
 
     // ------------------------------------------------------------

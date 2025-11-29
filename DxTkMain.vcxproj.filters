@@ -66,9 +66,6 @@
     <ClCompile Include="src\UfbxStaticModel_Mesh.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
-    <ClCompile Include="src\UfbxStaticModel_Skeleton.cpp">
-      <Filter>ソース ファイル</Filter>
-    </ClCompile>
     <ClCompile Include="src\FbxSkeleton.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>

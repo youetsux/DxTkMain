@@ -377,7 +377,7 @@ void UfbxStaticModel::ExpandAllNodes(const ufbx_scene* scene)
     if (c > r) r = c;
     if (r < 1e-3f) r = 1.0f;
 
-    skeleton_.scene_radius_ = r;
+    skeleton_.Data().scene_radius_ = r;
 
     // バインドポーズ頂点・スキニング結果頂点を準備
     mesh_.bind_vertices_ = mesh_.vertices_;

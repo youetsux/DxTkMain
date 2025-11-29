@@ -1,5 +1,259 @@
-﻿#include "Model.h"
+﻿//#include "Model.h"
+//#include "Gfx.h"
+//#include <algorithm>
+//#include <vector>
+//#include <cmath>
+//#include <cstring>
+//
+//using namespace DirectX;
+//
+//// ================================================================
+//// 無名 namespace（ファイル限定）
+//// ================================================================
+//namespace
+//{
+//    // ------------------------------------------------------------
+//    // ★ 定数（ALL_CAPS）
+//    // ------------------------------------------------------------
+//
+//    constexpr float  MODEL_ANIMATION_FPS = 60.0f;
+//    constexpr size_t MODEL_DEFAULT_MAX_COUNT = 32;
+//
+//    // ------------------------------------------------------------
+//    // ★ 内部ステート
+//    // ------------------------------------------------------------
+//
+//    XMMATRIX g_viewMatrix = XMMatrixIdentity();
+//    XMMATRIX g_projMatrix = XMMatrixIdentity();
+//    bool     g_hasViewProj = false;
+//
+//    std::vector<Model::ModelData> g_models;
+//    bool g_initialized = false;
+//}
+//
+//// ================================================================
+//// モジュール初期化
+//// ================================================================
+//void Model::Initialize(size_t maxCount)
+//{
+//    g_models.clear();
+//    g_models.resize(maxCount);
+//
+//    g_initialized = true;
+//}
+//
+//// ================================================================
+//// 全破棄
+//// ================================================================
+//void Model::AllRelease()
+//{
+//    if (!g_initialized) return;
+//
+//    for (auto& m : g_models)
+//    {
+//        m.used = false;
+//        m.ufbx.reset();
+//    }
+//}
+//
+//// ================================================================
+//// 単体削除
+//// ================================================================
+//void Model::Delete(int handle)
+//{
+//    if (handle < 0 || handle >= (int)g_models.size()) return;
+//
+//    ModelData& m = g_models[handle];
+//
+//    m.used = false;
+//    m.ufbx.reset();
+//}
+//
+//// ================================================================
+//// Transform 設定
+//// ================================================================
+//void Model::SetTransform(int handle, const Transform& transform)
+//{
+//    if (handle < 0 || handle >= (int)g_models.size()) return;
+//    g_models[handle].transform = transform;
+//}
+//
+//// ================================================================
+//// Transform → 行列
+//// ================================================================
+//XMMATRIX Model::GetMatrix(int handle)
+//{
+//    if (handle < 0 || handle >= (int)g_models.size())
+//        return XMMatrixIdentity();
+//
+//    return g_models[handle].transform.GetWorldMatrix();
+//}
+//
+//// ================================================================
+//// UFBX モデル読み込み
+//// ================================================================
+//int Model::LoadUfbx(const char* fbxPath)
+//{
+//    if (!g_initialized)
+//        Initialize(MODEL_DEFAULT_MAX_COUNT);
+//
+//    for (size_t i = 0; i < g_models.size(); ++i)
+//    {
+//        ModelData& m = g_models[i];
+//        if (m.used) continue;
+//
+//        m.used = true;
+//        m.fileName = fbxPath;
+//
+//        // ------------------------------
+//        // UfbxStaticModel だけでシーンを読み込む
+//        // ------------------------------
+//        m.ufbx = std::make_unique<UfbxStaticModel>();
+//
+//        if (!m.ufbx->Load(fbxPath))
+//        {
+//            m.used = false;
+//            m.ufbx.reset();
+//            return -1;
+//        }
+//
+//        // Transform を初期化（スケール1・回転0・位置0）
+//        m.transform = Transform();
+//
+//        return (int)i; // ← モデル ID (handle)
+//    }
+//
+//
+//    return -1;
+//}
+//
+//// ================================================================
+//// UFBX 単体描画（Transform 内部使用）
+//// ================================================================
+//void Model::DrawUfbx(int handle)
+//{
+//    if (!g_initialized || !g_hasViewProj) return;
+//    if (handle < 0 || handle >= (int)g_models.size()) return;
+//
+//    ModelData& m = g_models[handle];
+//    if (!m.used || !m.ufbx) return;
+//
+//    XMMATRIX world = m.transform.GetWorldMatrix();
+//
+//    m.ufbx->Draw(world, g_viewMatrix, g_projMatrix);
+//}
+//
+//// ================================================================
+//// Transform を指定して描画
+//// ================================================================
+//void Model::DrawUfbx(int handle, const Transform& transform)
+//{
+//    if (!g_initialized || !g_hasViewProj) return;
+//    if (handle < 0 || handle >= (int)g_models.size()) return;
+//
+//    ModelData& m = g_models[handle];
+//    if (!m.used || !m.ufbx) return;
+//
+//    XMMATRIX world = transform.GetWorldMatrix();
+//    m.ufbx->Draw(world, g_viewMatrix, g_projMatrix);
+//}
+//
+//
+//// ================================================================
+//// UFBX 全体描画（view / proj を保存）
+//// ================================================================
+//void Model::DrawUfbxAll(const XMMATRIX& view, const XMMATRIX& proj)
+//{
+//    g_viewMatrix = view;
+//    g_projMatrix = proj;
+//    g_hasViewProj = true;
+//
+//    for (size_t i = 0; i < g_models.size(); ++i)
+//    {
+//        if (g_models[i].used)
+//            DrawUfbx((int)i);
+//    }
+//}
+//
+////-------------------------------------------------------------
+//// 単体描画（Transform 指定・フレーム指定）
+////-------------------------------------------------------------
+//void Model::DrawUfbx(int handle, const Transform& transform, int frame)
+//{
+//    if (handle < 0) return;
+//    if (static_cast<size_t>(handle) >= g_models.size()) return;
+//
+//    Model::ModelData& m = g_models[handle];
+//    if (!m.used || !m.ufbx) return;
+//
+//    // Transform → ワールド行列
+//    DirectX::XMMATRIX world = transform.GetWorldMatrix();
+//
+//    // UfbxStaticModel 内部のデフォルトアニメを取得
+//    const ufbx_anim* anim = m.ufbx->GetDefaultAnim();
+//    
+//    if (anim)
+//    {
+//        const double fps = MODEL_ANIMATION_FPS; // 60.0f defined in this file
+//        double t_sec = anim->time_begin + (frame / fps);
+//
+//        // Clamp
+//        t_sec = std::clamp(t_sec, anim->time_begin, anim->time_end);
+//
+//        // 内部シーンを使ってスケルトンを更新するラッパを呼ぶ
+//        m.ufbx->UpdateSkeletonAtTime(t_sec);
+//    }
+//
+//    // 描画
+//    m.ufbx->Draw(world, g_viewMatrix, g_projMatrix);
+//}
+//
+//void Model::DrawUfbx(int handle, int frame)
+//{
+//    if (handle < 0 || handle >= (int)g_models.size()) return;
+//    auto& m = g_models[handle];
+//    if (!m.used) return;
+//
+//    DrawUfbx(handle, m.transform, frame);
+//}
+//
+//
+//
+//// ================================================================
+//// スケルトン全体描画
+//// ================================================================
+//void Model::DrawSkeletonAll()
+//{
+//    if (!g_initialized || !g_hasViewProj) return;
+//
+//    for (auto& m : g_models)
+//    {
+//        if (m.used && m.ufbx)
+//        {
+//            XMMATRIX world = m.transform.GetWorldMatrix();
+//            m.ufbx->DrawSkeleton(world, g_viewMatrix, g_projMatrix);
+//        }
+//    }
+//}
+//
+//void Model::SetViewProj(const DirectX::XMMATRIX& view, const DirectX::XMMATRIX& proj)
+//{
+//    g_viewMatrix = view;
+//    g_projMatrix = proj;
+//    g_hasViewProj = true;
+//}
+//
+//// ================================================================
+//// RayCast（未実装のダミー）
+//// ================================================================
+//void Model::RayCast(int handle, RayCastData* data)
+//{
+//    // 必要になったとき実装
+//}
+
+#include "Model.h"
 #include "Gfx.h"
+#include "ufbx.h"      // ufbx_anim を使うので追加
 #include <algorithm>
 #include <vector>
 #include <cmath>
@@ -120,9 +374,8 @@ int Model::LoadUfbx(const char* fbxPath)
         // Transform を初期化（スケール1・回転0・位置0）
         m.transform = Transform();
 
-        return (int)i; // ← モデル ID (handle)
+        return static_cast<int>(i); // ← モデル ID (handle)
     }
-
 
     return -1;
 }
@@ -158,7 +411,6 @@ void Model::DrawUfbx(int handle, const Transform& transform)
     m.ufbx->Draw(world, g_viewMatrix, g_projMatrix);
 }
 
-
 // ================================================================
 // UFBX 全体描画（view / proj を保存）
 // ================================================================
@@ -171,7 +423,7 @@ void Model::DrawUfbxAll(const XMMATRIX& view, const XMMATRIX& proj)
     for (size_t i = 0; i < g_models.size(); ++i)
     {
         if (g_models[i].used)
-            DrawUfbx((int)i);
+            DrawUfbx(static_cast<int>(i));
     }
 }
 
@@ -180,6 +432,7 @@ void Model::DrawUfbxAll(const XMMATRIX& view, const XMMATRIX& proj)
 //-------------------------------------------------------------
 void Model::DrawUfbx(int handle, const Transform& transform, int frame)
 {
+    if (!g_initialized || !g_hasViewProj) return;
     if (handle < 0) return;
     if (static_cast<size_t>(handle) >= g_models.size()) return;
 
@@ -192,13 +445,19 @@ void Model::DrawUfbx(int handle, const Transform& transform, int frame)
     // UfbxStaticModel 内部のデフォルトアニメを取得
     const ufbx_anim* anim = m.ufbx->GetDefaultAnim();
     
+
     if (anim)
     {
-        const double fps = MODEL_ANIMATION_FPS; // 60.0f defined in this file
-        double t_sec = anim->time_begin + (frame / fps);
+        const double fps = MODEL_ANIMATION_FPS; // 60.0f
+        const double frameSec = static_cast<double>(frame) / fps;
+        double       t_sec = anim->time_begin + frameSec;
 
         // Clamp
-        t_sec = std::clamp(t_sec, anim->time_begin, anim->time_end);
+        if (anim->time_end > anim->time_begin)
+        {
+            if (t_sec < anim->time_begin) t_sec = anim->time_begin;
+            if (t_sec > anim->time_end)   t_sec = anim->time_end;
+        }
 
         // 内部シーンを使ってスケルトンを更新するラッパを呼ぶ
         m.ufbx->UpdateSkeletonAtTime(t_sec);
@@ -210,14 +469,14 @@ void Model::DrawUfbx(int handle, const Transform& transform, int frame)
 
 void Model::DrawUfbx(int handle, int frame)
 {
+    if (!g_initialized || !g_hasViewProj) return;
     if (handle < 0 || handle >= (int)g_models.size()) return;
+
     auto& m = g_models[handle];
-    if (!m.used) return;
+    if (!m.used || !m.ufbx) return;
 
     DrawUfbx(handle, m.transform, frame);
 }
-
-
 
 // ================================================================
 // スケルトン全体描画
@@ -250,3 +509,4 @@ void Model::RayCast(int handle, RayCastData* data)
 {
     // 必要になったとき実装
 }
+
