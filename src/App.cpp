@@ -5,9 +5,50 @@
 //#include "Dice.h"
 #include "App.h"
 #include "Model.h"
+#include <chrono>
 
 
 using namespace DirectX;
+
+// ------------------------------------------------------------
+// フレームタイマー（App.cpp 内だけで使う）
+// ------------------------------------------------------------
+namespace
+{
+    using Clock = std::chrono::steady_clock;
+
+    Clock::time_point g_startTime;
+    Clock::time_point g_prevTime;
+    double            g_totalTime = 0.0;  // 起動からの経過時間 [秒]
+    double            g_deltaTime = 0.0;  // 直近フレームの経過時間 [秒]
+
+    // タイマー初期化（起動 / リサイズ時など）
+    void ResetTimer()
+    {
+        g_startTime = g_prevTime = Clock::now();
+        g_totalTime = 0.0;
+        g_deltaTime = 0.0;
+    }
+
+    // 1 フレームごとに呼んで、delta / total を更新
+    void TickTimer()
+    {
+        const Clock::time_point now = Clock::now();
+
+        g_deltaTime = std::chrono::duration<double>(now - g_prevTime).count();
+        g_totalTime = std::chrono::duration<double>(now - g_startTime).count();
+
+        g_prevTime = now;
+
+        // 安全用：極端に大きな delta が出たときは上限をかけてもよい
+        // if (g_deltaTime > 0.1) g_deltaTime = 0.1; // 例: 最大 0.1 秒(=10fps)まで
+    }
+
+    // 必要なら App.cpp 内から参照しやすいように getter も用意
+    double GetDeltaTime() { return g_deltaTime; }
+    double GetTotalTime() { return g_totalTime; }
+}
+
 
 void App::Initialize(HWND hwnd, unsigned w, unsigned h)
 {
@@ -33,6 +74,8 @@ void App::Initialize(HWND hwnd, unsigned w, unsigned h)
 	hModel = Model::LoadUfbx(".\\Assets\\GS_MotionSet.fbx");
 
     m_ready = true;
+    // ★タイマー初期化（ここから totalTime / deltaTime を計測開始）
+    ResetTimer();
 }
 
 void App::OnResize(unsigned w, unsigned h)
@@ -59,6 +102,8 @@ void App::Update()
 void App::Render()
 {
     if (!m_ready) return;
+    // ★1フレーム分の経過時間を更新
+    TickTimer();
 
     m_renderer.BeginFrame();
 
@@ -77,8 +122,12 @@ void App::Render()
     
     Model::SetTransform(hModel, t);
 
-    static int fr = 0;
-	Model::DrawUfbx(hModel, t, ++fr); // フレーム指定デモ
+    double timeSec = GetTotalTime();      // さっき入れた経過時間
+
+    Model::DrawUfbx(hModel, t, timeSec);
+
+ //   static int fr = 0;;
+	//Model::DrawUfbx(hModel, t, ++fr); // フレーム指定デモ
     
     m_renderer.EndFrame();
     m_renderer.Present();

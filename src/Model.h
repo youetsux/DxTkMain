@@ -82,6 +82,9 @@ namespace Model
     // フレーム指定（基本）
     void DrawUfbx(int handle, const Transform& transform, int frame);
 
+    // 実時間（秒）指定でアニメーションするバージョン
+    void DrawUfbx(int handle, const Transform& transform, double timeSec);
+
     // 現在の transform を使うバージョン
     void DrawUfbx(int handle, int frame);
 

@@ -11,6 +11,7 @@
 #include <CommonStates.h>
 #include "ufbx.h"
 #include "FbxSkeleton.h"
+#include "FbxMesh.h"
 
 // ufbx を前方宣言（ヘッダに直接依存しないようにする）
 struct ufbx_scene;
@@ -179,18 +180,18 @@ private:
     // ------------------------------------------------------------
     struct DrawResources
     {
-        // メッシュ描画用
-        Microsoft::WRL::ComPtr<ID3D11Buffer>       vb_;      // 頂点バッファ
-        Microsoft::WRL::ComPtr<ID3D11Buffer>       ib_;      // インデックスバッファ
-        Microsoft::WRL::ComPtr<ID3D11InputLayout>  layout_;  // 入力レイアウト
-        std::unique_ptr<DirectX::CommonStates>     states_;  // 汎用ステート（ブレンド、サンプラ等）
-        std::unique_ptr<DirectX::BasicEffect>      fx_;      // BasicEffect（ライティング＋テクスチャ）
+        Microsoft::WRL::ComPtr<ID3D11Buffer>       vb_;
+        Microsoft::WRL::ComPtr<ID3D11Buffer>       ib_;
+        Microsoft::WRL::ComPtr<ID3D11InputLayout>  layout_;
 
-        // ボーンデバッグ描画用
-        std::unique_ptr<DirectX::BasicEffect>      debug_fx_;   // 頂点カラーのみのエフェクト
-        Microsoft::WRL::ComPtr<ID3D11InputLayout>  debug_layout_; // デバッグライン用レイアウト
-        Microsoft::WRL::ComPtr<ID3D11Buffer>       bone_vb_;    // ボーン線描画用頂点バッファ
-        size_t                                     bone_vb_size_ = 0; // バッファに確保されている頂点数
+        // ★ DX11 名前空間に統一
+        std::unique_ptr<DirectX::DX11::CommonStates> states_;
+        std::unique_ptr<DirectX::DX11::BasicEffect>  fx_;
+
+        std::unique_ptr<DirectX::DX11::BasicEffect>  debug_fx_;
+        Microsoft::WRL::ComPtr<ID3D11InputLayout>    debug_layout_;
+        Microsoft::WRL::ComPtr<ID3D11Buffer>         bone_vb_;
+        size_t                                       bone_vb_size_ = 0;
     };
 
     // ------------------------------------------------------------
@@ -211,7 +212,8 @@ private:
     // インスタンスが持つデータ
     // ------------------------------------------------------------
     FbxSkeleton skeleton_;   // ボーン関連の全情報
-    MeshData     mesh_;       // メッシュ関連のCPU側データ
+    FbxMesh mesh_;
+    MeshData     meshData_;       // メッシュ関連のCPU側データ
     DrawResources draw_;      // 描画に必要な DirectX リソース群
     std::unique_ptr<ufbx_scene, void(*)(ufbx_scene*)> scene_{ nullptr, ufbx_free_scene };
 };
