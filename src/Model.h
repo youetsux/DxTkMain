@@ -6,8 +6,7 @@
 #include <memory>
 
 #include "Transform.h"
-#include "UfbxStaticModel.h"
-#include "ufbx.h" // ufbx_scene / ufbx_free_scene
+#include "FbxModel.h"   // ★ 旧 "Fbx.h" の代わり
 
 // RayCast 用データ（別ヘッダで定義されている想定）
 struct RayCastData;
@@ -36,24 +35,35 @@ namespace Model
     // ---------------------------------------
     // モデル単体のデータ
     // ---------------------------------------
+
+
     struct ModelData
     {
-        bool used = false;
-
         std::string fileName;
+
+        // 旧：Fbx* pFbx;
+        // 同一 FBX を複数ハンドルで共有したいので shared_ptr 推奨
+        std::shared_ptr<FbxModel> pFbx;
 
         Transform transform;
 
-        std::unique_ptr<UfbxStaticModel> ufbx;
+        float nowFrame, animSpeed;
+        int   startFrame, endFrame;
 
-        // FBX 生シーンデータ（削除子 ufbx_free_scene）
-        //std::unique_ptr<ufbx_scene, void(*)(ufbx_scene*)> scene =
-        //    std::unique_ptr<ufbx_scene, void(*)(ufbx_scene*)>(nullptr, ufbx_free_scene);
+        ModelData()
+            : pFbx(), nowFrame(0), animSpeed(0), startFrame(0), endFrame(0)
+        {
+        }
 
-        float animationFps = 60.0f; // 後で上書き
-
-        AnimState animInfo;
+        void SetAnimFrame(int start, int end, float speed)
+        {
+            nowFrame = static_cast<float>(start);
+            startFrame = start;
+            endFrame = end;
+            animSpeed = speed;
+        }
     };
+
 
     // モジュール初期化（最大登録数を指定）
     void Initialize(size_t maxCount);

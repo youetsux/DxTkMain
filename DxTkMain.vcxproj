@@ -144,6 +144,7 @@
     <ClCompile Include="src\Texture.cpp" />
     <ClCompile Include="src\Transform.cpp" />
     <ClCompile Include="src\ufbx.c" />
+    <ClCompile Include="src\UfbxStaticModel.cpp" />
     <ClCompile Include="src\UfbxUtil.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -163,6 +164,7 @@
     <ClInclude Include="src\Texture.h" />
     <ClInclude Include="src\Transform.h" />
     <ClInclude Include="src\ufbx.h" />
+    <ClInclude Include="src\UfbxStaticModel.h" />
     <ClInclude Include="src\UfbxUtil.h" />
   </ItemGroup>
   <ItemGroup>

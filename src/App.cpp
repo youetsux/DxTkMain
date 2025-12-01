@@ -6,7 +6,8 @@
 #include "App.h"
 #include "Model.h"
 #include <chrono>
-#include "FbxModel.h"
+//#include "FbxModel.h"
+#include "Transform.h"
 
 using namespace DirectX;
 
@@ -73,17 +74,32 @@ void App::Initialize(HWND hwnd, unsigned w, unsigned h)
     Camera::SetPosition(XMVectorSet(0, 150, -300, 0));
     Camera::SetTarget(XMVectorSet(0, 0, 150, 0));
 
-	//Model::Initialize(2);
-	//hModel = Model::LoadUfbx(".\\Assets\\GS_MotionSet.fbx");
-    //hModel2 = Model::LoadUfbx(".\\Assets\\Enemy.fbx");
+	Model::Initialize(2);
+	hModel = Model::LoadUfbx(".\\Assets\\GS_MotionSet.fbx");
+    hModel2 = Model::LoadUfbx(".\\Assets\\Enemy.fbx");
 
     m_ready = true;
+
+    Transform t;
+    t.position_ = { 0, 0, -50 };
+    t.rotate_ = { 0, 0, 0 };
+    t.scale_ = {1, 1, 1 };
+    Transform t2;
+    t.position_ = { 0, 0, 10 };
+    t.rotate_ = { 0, 0, 0 };
+    t.scale_ = {10, 10, 10, };
+
+    Model::SetTransform(hModel, t);
+    Model::SetTransform(hModel2, t2);
+
+    Model::DrawUfbx(hModel);
+    Model::DrawUfbx(hModel2);
     // ★タイマー初期化（ここから totalTime / deltaTime を計測開始）
     // Initialize() のどこか
-    if (!g_fbxLoaded)
-    {
-        g_fbxLoaded = g_testFbx.Load(".\\Assets\\GS_MotionSet.fbx");
-    }
+    //if (!g_fbxLoaded)
+    //{
+    //    g_fbxLoaded = g_testFbx.Load(".\\Assets\\GS_MotionSet.fbx");
+    //}
 
 
     ResetTimer();
@@ -131,14 +147,14 @@ void App::Render()
 	t.rotate_ = { 0.0f, 0.0f, 0.0f};
 	t.scale_ = {0.5f, 0.5f, 0.5f};
 
-    Transform t2;
-    t2.position_ = { 0.0f,0.0f, -50.0f };
-    t2.rotate_ = { 0.0f, 0.0f, 0.0f };
-    t2.scale_ = { 10.0f, 10.0f, 10.0f };
-    //t.Calclation();
-	Model::SetViewProj(V, P);
-    
-    Model::SetTransform(hModel, t);
+ //   Transform t2;
+ //   t2.position_ = { 0.0f,0.0f, -50.0f };
+ //   t2.rotate_ = { 0.0f, 0.0f, 0.0f };
+ //   t2.scale_ = { 10.0f, 10.0f, 10.0f };
+ //   //t.Calclation();
+	//Model::SetViewProj(V, P);
+ //   
+ //   Model::SetTransform(hModel, t);
 
 
     // Render() の中
