@@ -174,8 +174,8 @@ void FbxSkeleton::UpdateAtTime(const ufbx_scene* scene, const ufbx_anim* anim, d
     }
 
     // 計算済みノードの結果をためるキャッシュ
-    std::unordered_map<const ufbx_node*, DirectX::XMFLOAT4X4> cache;
-
+    static std::unordered_map<const ufbx_node*, DirectX::XMFLOAT4X4> cache;
+    cache.clear();
     data_.curr_world_.resize(data_.bones_.size());
 
     for (size_t i = 0; i < data_.bones_.size(); ++i) {

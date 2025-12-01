@@ -133,6 +133,7 @@
     <ClCompile Include="src\DeviceResources.cpp" />
     <ClCompile Include="src\Dice.cpp" />
     <ClCompile Include="src\FbxMesh.cpp" />
+    <ClCompile Include="src\FbxModel.cpp" />
     <ClCompile Include="src\FbxSkeleton.cpp" />
     <ClCompile Include="src\Gfx.cpp" />
     <ClCompile Include="src\Main.cpp" />
@@ -143,7 +144,6 @@
     <ClCompile Include="src\Texture.cpp" />
     <ClCompile Include="src\Transform.cpp" />
     <ClCompile Include="src\ufbx.c" />
-    <ClCompile Include="src\UfbxStaticModel.cpp" />
     <ClCompile Include="src\UfbxUtil.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -152,6 +152,7 @@
     <ClInclude Include="src\DeviceResources.h" />
     <ClInclude Include="src\Dice.h" />
     <ClInclude Include="src\FbxMesh.h" />
+    <ClInclude Include="src\FbxModel.h" />
     <ClInclude Include="src\FbxSkeleton.h" />
     <ClInclude Include="src\Gfx.h" />
     <ClInclude Include="src\GfxState.h" />
@@ -162,7 +163,6 @@
     <ClInclude Include="src\Texture.h" />
     <ClInclude Include="src\Transform.h" />
     <ClInclude Include="src\ufbx.h" />
-    <ClInclude Include="src\UfbxStaticModel.h" />
     <ClInclude Include="src\UfbxUtil.h" />
   </ItemGroup>
   <ItemGroup>

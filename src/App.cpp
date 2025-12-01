@@ -6,7 +6,7 @@
 #include "App.h"
 #include "Model.h"
 #include <chrono>
-
+#include "FbxModel.h"
 
 using namespace DirectX;
 
@@ -47,6 +47,9 @@ namespace
     // 必要なら App.cpp 内から参照しやすいように getter も用意
     double GetDeltaTime() { return g_deltaTime; }
     double GetTotalTime() { return g_totalTime; }
+
+    FbxModel g_testFbx;
+    bool     g_fbxLoaded = false;
 }
 
 
@@ -70,12 +73,22 @@ void App::Initialize(HWND hwnd, unsigned w, unsigned h)
     Camera::SetPosition(XMVectorSet(0, 150, -300, 0));
     Camera::SetTarget(XMVectorSet(0, 0, 150, 0));
 
-	Model::Initialize(2);
-	hModel = Model::LoadUfbx(".\\Assets\\GS_MotionSet.fbx");
+	//Model::Initialize(2);
+	//hModel = Model::LoadUfbx(".\\Assets\\GS_MotionSet.fbx");
+    //hModel2 = Model::LoadUfbx(".\\Assets\\Enemy.fbx");
 
     m_ready = true;
     // ★タイマー初期化（ここから totalTime / deltaTime を計測開始）
+    // Initialize() のどこか
+    if (!g_fbxLoaded)
+    {
+        g_fbxLoaded = g_testFbx.Load(".\\Assets\\GS_MotionSet.fbx");
+    }
+
+
     ResetTimer();
+
+
 }
 
 void App::OnResize(unsigned w, unsigned h)
@@ -96,7 +109,7 @@ void App::Update()
     if (!m_ready) return;
 
     // デモ用途：回転角を更新（必要なければ削除OK）
-    m_angle += dt * 10.0f; // 45°/s
+    //m_angle += dt * 10.0f; // 45°/s
 }
 
 void App::Render()
@@ -108,23 +121,37 @@ void App::Render()
     m_renderer.BeginFrame();
 
     // WVP を App 側で合成して Quad に渡す（Quad がパイプラインをバインド）
-    XMMATRIX Wy = XMMatrixRotationY(m_angle);
-    XMMATRIX Wx = XMMatrixRotationX(m_angle/3.0f);
+    //XMMATRIX Wy = XMMatrixRotationY(m_angle);
+    //XMMATRIX Wx = XMMatrixRotationX(m_angle/3.0f);
     XMMATRIX V = Camera::GetViewMatrix();
     XMMATRIX P = Camera::GetProjectionMatrix();
 
 	Transform t;
-	t.position_ = { 0.0f,0.0f,0.0};
-	t.rotate_ = { 0.0f, m_angle, 0.0f};
-	t.scale_ = { 1.0f, 1.0f, 1.0f};
+	t.position_ = { 0.0f,0.0f,0.0f};
+	t.rotate_ = { 0.0f, 0.0f, 0.0f};
+	t.scale_ = {0.5f, 0.5f, 0.5f};
+
+    Transform t2;
+    t2.position_ = { 0.0f,0.0f, -50.0f };
+    t2.rotate_ = { 0.0f, 0.0f, 0.0f };
+    t2.scale_ = { 10.0f, 10.0f, 10.0f };
     //t.Calclation();
 	Model::SetViewProj(V, P);
     
     Model::SetTransform(hModel, t);
 
-    double timeSec = GetTotalTime();      // さっき入れた経過時間
 
-    Model::DrawUfbx(hModel, t, timeSec);
+    // Render() の中
+    if (g_fbxLoaded)
+    {
+        // ここは今の「timeSec」の作り方に合わせて
+        double timeSec = GetTotalTime();/* GetTotalTime() なり、カウンタ/60.0 なり */;
+
+        g_testFbx.UpdateSkeletonAtTime(timeSec);
+
+        XMMATRIX world = t.GetWorldMatrix();
+        g_testFbx.Draw(world, V, P);
+    }
 
  //   static int fr = 0;;
 	//Model::DrawUfbx(hModel, t, ++fr); // フレーム指定デモ
