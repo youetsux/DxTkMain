@@ -114,6 +114,9 @@ bool FbxMesh::BuildFromScene(const ufbx_scene* scene,
         return false;
     }
 
+    mesh_.vertices_.clear();
+    mesh_.vertices_.shrink_to_fit();
+
     return true;
 }
 
@@ -483,10 +486,10 @@ bool FbxMesh::CreateEffectsAndTextures(
     fx->SetPerPixelLighting(true);
     fx->SetVertexColorEnabled(false);
     fx->SetTextureEnabled(true);
-    fx->SetAmbientLightColor({ 0.25f, 0.25f, 0.30f });
-    fx->SetDiffuseColor({ 0.90f, 0.90f, 0.95f, 1.0f });
+    fx->SetAmbientLightColor({ 0.3f, 0.3f, 0.3f });
+    fx->SetDiffuseColor({ 1.0f,  1.0f,  1.0f, 1.0f });
     fx->SetLightEnabled(0, true);
-    fx->SetLightDirection(0, { -0.5f, -1.0f, -0.3f });
+    fx->SetLightDirection(0, { -0.5f, -1.0f, 0.3f });
     fx->SetLightDiffuseColor(0, { 1.0f, 1.0f, 1.0f, 1.0f });
 
     // 入力レイアウト（頂点の並び方の説明）

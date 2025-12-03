@@ -1,366 +1,473 @@
 ﻿#include "Model.h"
+#include "FbxModel.h"
+#include "Camera.h"
+
+#include <vector>
+#include <string>
+#include <unordered_map>
 
 using namespace DirectX;
 
+//====================================
+// 内部管理用構造体 & キャッシュ
+//====================================
 namespace
 {
-    constexpr float  DEFAULT_ANIM_FPS = 60.0f;
-    constexpr size_t DEFAULT_MODEL_SLOTS = 32;
-
-    // モデル配列（ハンドル = インデックス）
-    std::vector<Model::ModelData> g_models;
-    bool g_initialized = false;
-
-    // 共通 view / proj
-    XMMATRIX g_viewMatrix = XMMatrixIdentity();
-    XMMATRIX g_projMatrix = XMMatrixIdentity();
-    bool     g_hasViewProj = false;
-
-    // ---------------------------------------
-    // 内部ヘルパ
-    // ---------------------------------------
-
-    inline bool IsValidHandle(int handle)
+    // ハンドルごとの「インスタンス」データ
+    struct ModelData
     {
-        return handle >= 0 && handle < static_cast<int>(g_models.size());
+        FbxModel* pFbx = nullptr;   // 共有リソース（所有権なし）
+        Transform* pTransform = nullptr;   // 外部の Transform（所有権なし）
+
+        std::string fileName;              // 読み込んだファイルパス
+
+        int   startFrame = 0;
+        int   endFrame = 0;
+        float animSpeed = 0.0f;
+        float currentFrame = 0.0f;
+
+        int animStackIndex = -1;
+
+        bool inUse = false;
+    };
+
+    std::vector<ModelData> g_models;
+
+    // ファイルパス → 共有 FbxModel*
+    std::unordered_map<std::string, FbxModel*> g_modelCache;
+
+    // 共有 FbxModel* → 参照カウント
+    std::unordered_map<FbxModel*, int> g_refCount;
+
+    int AllocHandle()
+    {
+        for (int i = 0; i < static_cast<int>(g_models.size()); ++i)
+        {
+            if (!g_models[i].inUse)
+                return i;
+        }
+        g_models.emplace_back();
+        return static_cast<int>(g_models.size() - 1);
     }
 
-    // frame → timeSec 変換
-    double FrameToTimeSec(const Model::ModelData& m, int frame)
+    bool IsValidHandle(int handle)
     {
-        const Model::AnimState& a = m.animInfo;
+        //return handle >= 0
+        //    && handle < static_cast<int>(g_models.size())
+        //    && g_models[handle].inUse
+        //    && g_models[handle].pFbx != nullptr;
+        return handle >= 0 && handle < (int)g_models.size() && g_models[handle].inUse;
 
-        if (a.totalFrames <= 0)
-        {
-            return a.beginTime;    // アニメなし
-        }
-
-        const double fps = static_cast<double>(m.animationFps);
-        const double t0 = a.beginTime;
-        double       t_sec = t0 + static_cast<double>(frame) / fps;
-
-        if (a.endTime > a.beginTime)
-        {
-            if (t_sec < a.beginTime) t_sec = a.beginTime;
-            if (t_sec > a.endTime)   t_sec = a.endTime;
-        }
-
-        return t_sec;
     }
 
-    // currentFrame を進めて整数フレームを返す
-    int AdvanceAnimFrame(Model::ModelData& m)
+    // 共有モデルの参照カウントを減らし、0 になったら削除
+    void ReleaseSharedModel(FbxModel* pFbx, const std::string& fileName)
     {
-        Model::AnimState& a = m.animInfo;
+        if (!pFbx) return;
 
-        if (a.totalFrames <= 0)
+        auto itRef = g_refCount.find(pFbx);
+        if (itRef == g_refCount.end()) return;
+
+        itRef->second--;
+        if (itRef->second <= 0)
         {
-            return 0;
-        }
-
-        a.currentFrame += a.speed;
-
-        if (a.loop)
-        {
-            if (a.currentFrame > static_cast<float>(a.endFrame))
+            // キャッシュからも消す
+            for (auto it = g_modelCache.begin(); it != g_modelCache.end(); ++it)
             {
-                a.currentFrame = static_cast<float>(a.startFrame);
+                if (it->second == pFbx)
+                {
+                    g_modelCache.erase(it);
+                    break;
+                }
             }
+            g_refCount.erase(itRef);
+
+            delete pFbx;
+        }
+    }
+
+}
+
+//====================================
+// Model 名前空間 実装
+//====================================
+namespace Model
+{
+    void Initialize()
+    {
+        // すべてのハンドルから参照を外しつつ、
+        // 共有モデルの参照カウントを減らす
+        for (auto& md : g_models)
+        {
+            if (md.inUse && md.pFbx)
+            {
+                ReleaseSharedModel(md.pFbx, md.fileName);
+                md.pFbx = nullptr;
+                md.pTransform = nullptr;
+                md.inUse = false;
+            }
+        }
+        g_models.clear();
+
+        g_modelCache.clear();
+        g_refCount.clear();
+    }
+
+    int Load(std::string fileName)
+    {
+        int h = AllocHandle();
+        auto& md = g_models[h];
+
+        // すでにこのハンドルが別モデルを指していた場合は解放
+        if (md.inUse && md.pFbx)
+        {
+            ReleaseSharedModel(md.pFbx, md.fileName);
+            md.pFbx = nullptr;
+        }
+
+        // 共有キャッシュに同じファイルがあるか？
+        FbxModel* pShared = nullptr;
+
+        auto it = g_modelCache.find(fileName);
+        if (it != g_modelCache.end())
+        {
+            // 既にロード済み → 共有
+            pShared = it->second;
+            g_refCount[pShared] += 1;
         }
         else
         {
-            if (a.currentFrame > static_cast<float>(a.endFrame))
+            // 初回ロード
+            FbxModel* pNew = new FbxModel();
+            if (!pNew->Load(fileName.c_str()))
             {
-                a.currentFrame = static_cast<float>(a.endFrame);
+                delete pNew;
+                return -1;
+            }
+
+            g_modelCache[fileName] = pNew;
+            g_refCount[pNew] = 1;
+            pShared = pNew;
+        }
+
+        md.pFbx = pShared;
+        md.pTransform = nullptr;
+        md.fileName = fileName;
+        md.startFrame = 0;
+        md.endFrame = 0;
+        md.animSpeed = 0.0f;
+        md.currentFrame = 0.0f;
+        md.inUse = true;
+
+        return h;
+    }
+
+    //void Draw(int handle)
+    //{
+    //    if (!IsValidHandle(handle)) return;
+
+    //    auto& md = g_models[handle];
+
+    //    // デフォルトアニメ取得
+    //    const ufbx_anim* anim = md.pFbx->GetDefaultAnim();
+
+    //    // SetAnimFrame が設定されているかどうか
+    //    bool hasAnimSetting =
+    //        (md.endFrame > md.startFrame) && (md.animSpeed != 0.0f);
+
+    //    if (anim && hasAnimSetting)
+    //    {
+    //        // 1. アニメフレームを進める（外向きはフレーム基準）
+    //        md.currentFrame += md.animSpeed;
+
+    //        // 2. startFrame ～ endFrame でループ
+    //        float rangeLen = float(md.endFrame - md.startFrame + 1);
+    //        if (rangeLen <= 0.0f) rangeLen = 1.0f;
+
+    //        while (md.currentFrame > md.endFrame)
+    //        {
+    //            md.currentFrame -= rangeLen;
+    //        }
+    //        while (md.currentFrame < md.startFrame)
+    //        {
+    //            md.currentFrame += rangeLen;
+    //        }
+
+    //        // 3. フレーム → 時間変換（内部は時間基準）
+    //        constexpr double ANIM_FPS = 60.0;             // ★ ここを 60 に固定
+    //        const double secondsPerFrame = 1.0 / ANIM_FPS;
+
+    //        double animBegin = anim->time_begin;
+    //        double animEnd = anim->time_end;
+    //        double tSec = animBegin + double(md.currentFrame) * secondsPerFrame;
+
+    //        // 念のためクランプ（通常は endFrame <= 総フレーム数なら越えない）
+    //        if (tSec < animBegin) tSec = animBegin;
+    //        if (tSec > animEnd)   tSec = animEnd;
+
+    //        md.pFbx->UpdateSkeletonAtTime(anim, tSec);
+    //    }
+    //    else
+    //    {
+    //        // アニメ設定なし or アニメ自体なし → t=0 で固定
+    //        md.pFbx->UpdateSkeletonAtTime(0.0);
+    //    }
+
+    //    // ここから下は、Transform / Camera / Draw は今まで通り
+    //    XMMATRIX world = XMMatrixIdentity();
+    //    if (md.pTransform)
+    //    {
+    //        world = md.pTransform->GetWorldMatrix();
+    //    }
+
+    //    XMMATRIX view = Camera::GetViewMatrix();
+    //    XMMATRIX proj = Camera::GetProjectionMatrix();
+
+    //    md.pFbx->Draw(world, view, proj);
+    //}
+
+
+    void Model::Draw(int handle)
+    {
+        constexpr double ANIM_FPS = 60.0;
+        if (!IsValidHandle(handle)) return;
+
+        auto& md = g_models[handle];
+
+        const ufbx_scene* scene = md.pFbx ? md.pFbx->Scene() : nullptr;
+
+        // ★ 1) 使うアニメを決める（AnimStack 指定があれば優先）
+        const ufbx_anim* anim = nullptr;
+        if (scene) {
+            if (md.animStackIndex >= 0 &&
+                (size_t)md.animStackIndex < scene->anim_stacks.count)
+            {
+                const ufbx_anim_stack* stack = scene->anim_stacks.data[md.animStackIndex];
+                if (stack) {
+                    anim = stack->anim;          // AnimStack に対応する ufbx_anim
+                }
+            }
+
+            // AnimStack 未指定 or 無効 → 既存のデフォルトアニメ
+            if (!anim) {
+                anim = md.pFbx->GetDefaultAnim();
             }
         }
 
-        int frame = static_cast<int>(a.currentFrame);
-        if (frame < a.startFrame) frame = a.startFrame;
-        if (frame > a.endFrame)   frame = a.endFrame;
+        bool hasAnimSetting =
+            (md.endFrame > md.startFrame) && (md.animSpeed != 0.0f);
 
-        return frame;
-    }
-
-    // メイン描画ヘルパ（Transform と timeSec を受け取る）
-    void DrawInternal(Model::ModelData& m,
-        const Transform& transform,
-        double             timeSec)
-    {
-        if (!m.used)                 return;
-        if (!m.ufbx)                 return;
-        if (!g_hasViewProj)          return;
-
-        m.ufbx->UpdateSkeletonAtTime(timeSec);
-
-        XMMATRIX world = transform.GetWorldMatrix();
-        m.ufbx->Draw(world, g_viewMatrix, g_projMatrix);
-    }
-
-} // anonymous namespace
-
-// ------------------------------------------------------------
-// モジュール初期化
-// ------------------------------------------------------------
-void Model::Initialize(std::size_t maxCount)
-{
-    if (maxCount == 0)
-        maxCount = DEFAULT_MODEL_SLOTS;
-
-    g_models.clear();
-    g_models.resize(maxCount);   // used=false で埋まる
-
-    g_initialized = true;
-    g_hasViewProj = false;
-}
-
-// ------------------------------------------------------------
-// 全破棄
-// ------------------------------------------------------------
-void Model::AllRelease()
-{
-    if (!g_initialized) return;
-
-    for (auto& m : g_models)
-    {
-        m.used = false;
-        m.ufbx.reset();
-        m.fileName.clear();
-        m.animInfo = AnimState{};
-    }
-
-    g_models.clear();
-    g_initialized = false;
-    g_hasViewProj = false;
-}
-
-// ------------------------------------------------------------
-// 単体削除
-// ------------------------------------------------------------
-void Model::Delete(int handle)
-{
-    if (!g_initialized) return;
-    if (!IsValidHandle(handle)) return;
-
-    ModelData& m = g_models[handle];
-    if (!m.used) return;
-
-    m.used = false;
-    m.ufbx.reset();
-    m.fileName.clear();
-    m.animInfo = AnimState{};
-}
-
-// ------------------------------------------------------------
-// Transform 設定
-// ------------------------------------------------------------
-void Model::SetTransform(int handle, const Transform& transform)
-{
-    if (!g_initialized) return;
-    if (!IsValidHandle(handle)) return;
-
-    ModelData& m = g_models[handle];
-    if (!m.used) return;
-
-    m.transform = transform;
-}
-
-// ------------------------------------------------------------
-// Transform → 行列
-// ------------------------------------------------------------
-XMMATRIX Model::GetMatrix(int handle)
-{
-    if (!g_initialized)          return XMMatrixIdentity();
-    if (!IsValidHandle(handle))  return XMMatrixIdentity();
-
-    const ModelData& m = g_models[handle];
-    if (!m.used)                 return XMMatrixIdentity();
-
-    return m.transform.GetWorldMatrix();
-}
-
-// ------------------------------------------------------------
-// UFBX モデル読み込み（実体は FbxModel）
-// ------------------------------------------------------------
-int Model::LoadUfbx(const char* fbxPath)
-{
-    if (!fbxPath) return -1;
-
-    if (!g_initialized)
-        Initialize(DEFAULT_MODEL_SLOTS);
-
-    // 空きスロットを探す
-    int freeIndex = -1;
-    for (int i = 0; i < static_cast<int>(g_models.size()); ++i)
-    {
-        if (!g_models[i].used)
+        if (anim && hasAnimSetting)
         {
-            freeIndex = i;
-            break;
+            // ★ 2) 外向きはフレーム基準
+            md.currentFrame += md.animSpeed;
+
+            float rangeLen = float(md.endFrame - md.startFrame + 1);
+            if (rangeLen <= 0.0f) rangeLen = 1.0f;
+
+            while (md.currentFrame > md.endFrame) md.currentFrame -= rangeLen;
+            while (md.currentFrame < md.startFrame) md.currentFrame += rangeLen;
+
+            // ★ 3) 内部では時間基準（フレーム → 秒）
+            const double secondsPerFrame = 1.0 / ANIM_FPS;
+            double tSec = anim->time_begin + double(md.currentFrame) * secondsPerFrame;
+
+            md.pFbx->UpdateSkeletonAtTime(anim, tSec);
         }
-    }
-    if (freeIndex < 0)
-    {
-        // 空きがない場合は拡張
-        freeIndex = static_cast<int>(g_models.size());
-        g_models.emplace_back();
-    }
-
-    ModelData& m = g_models[freeIndex];
-    m.used = true;
-    m.fileName = fbxPath;
-    m.transform = Transform();
-    m.ufbx = std::make_unique<FbxModel>();
-
-    // FbxModel::Load
-    if (!m.ufbx->Load(fbxPath))
-    {
-        m.used = false;
-        m.ufbx.reset();
-        m.fileName.clear();
-        return -1;
-    }
-
-    // アニメーション情報の初期化
-    m.animationFps = DEFAULT_ANIM_FPS;
-    m.animInfo = AnimState{};
-
-    if (const ufbx_anim* anim = m.ufbx->GetDefaultAnim())
-    {
-        AnimState& a = m.animInfo;
-
-        a.beginTime = anim->time_begin;
-        a.endTime = anim->time_end;
-
-        const double span = anim->time_end - anim->time_begin;
-        if (span > 0.0)
+        else if (anim)
         {
-            a.totalFrames = static_cast<int>(span * m.animationFps + 0.5);
-            if (a.totalFrames < 1) a.totalFrames = 1;
-
-            a.startFrame = 0;
-            a.endFrame = a.totalFrames - 1;
-            a.currentFrame = 0.0f;
-            a.speed = 1.0f;
-            a.loop = true;
+            // アニメ設定がない場合でも、指定アニメの先頭姿勢で止めておく
+            md.pFbx->UpdateSkeletonAtTime(anim, anim->time_begin);
         }
+        else
+        {
+            // アニメ自体がない場合は t=0 で固定（従来と同じ）
+            md.pFbx->UpdateSkeletonAtTime(0.0);
+        }
+
+        // --- ここから下は既存の描画処理と同じ ---
+
+        DirectX::XMMATRIX world = DirectX::XMMatrixIdentity();
+        if (md.pTransform) {
+            world = md.pTransform->GetWorldMatrix();
+        }
+
+        DirectX::XMMATRIX view = Camera::GetViewMatrix();
+        DirectX::XMMATRIX proj = Camera::GetProjectionMatrix();
+
+        md.pFbx->Draw(world, view, proj);
     }
 
-    return freeIndex;
-}
-
-// ------------------------------------------------------------
-// view / proj 設定
-// ------------------------------------------------------------
-void Model::SetViewProj(const XMMATRIX& view, const XMMATRIX& proj)
-{
-    g_viewMatrix = view;
-    g_projMatrix = proj;
-    g_hasViewProj = true;
-}
-
-// ------------------------------------------------------------
-// UFBX 単体描画（内部 view/proj を利用・Transform 内部使用）
-// ------------------------------------------------------------
-void Model::DrawUfbx(int handle)
-{
-    if (!g_initialized || !g_hasViewProj) return;
-    if (!IsValidHandle(handle))          return;
-
-    ModelData& m = g_models[handle];
-    if (!m.used || !m.ufbx) return;
-
-    int frame = AdvanceAnimFrame(m);
-    double t_sec = FrameToTimeSec(m, frame);
-
-    DrawInternal(m, m.transform, t_sec);
-}
-
-// ------------------------------------------------------------
-// Transform を都度指定して描画
-// ------------------------------------------------------------
-void Model::DrawUfbx(int handle, const Transform& transform)
-{
-    if (!g_initialized || !g_hasViewProj) return;
-    if (!IsValidHandle(handle))          return;
-
-    ModelData& m = g_models[handle];
-    if (!m.used || !m.ufbx) return;
-
-    int frame = AdvanceAnimFrame(m);
-    double t_sec = FrameToTimeSec(m, frame);
-
-    DrawInternal(m, transform, t_sec);
-}
-
-// ------------------------------------------------------------
-// フレーム指定（基本）
-// ------------------------------------------------------------
-void Model::DrawUfbx(int handle, const Transform& transform, int frame)
-{
-    if (!g_initialized || !g_hasViewProj) return;
-    if (!IsValidHandle(handle))          return;
-
-    ModelData& m = g_models[handle];
-    if (!m.used || !m.ufbx) return;
-
-    double t_sec = FrameToTimeSec(m, frame);
-    DrawInternal(m, transform, t_sec);
-}
-
-// ------------------------------------------------------------
-// 現在の transform を使うバージョン
-// ------------------------------------------------------------
-void Model::DrawUfbx(int handle, int frame)
-{
-    if (!g_initialized || !g_hasViewProj) return;
-    if (!IsValidHandle(handle))          return;
-
-    ModelData& m = g_models[handle];
-    if (!m.used || !m.ufbx) return;
-
-    double t_sec = FrameToTimeSec(m, frame);
-    DrawInternal(m, m.transform, t_sec);
-}
-
-// ------------------------------------------------------------
-// UFBX 全体描画（view/proj を内部に保存）
-// ------------------------------------------------------------
-void Model::DrawUfbxAll(const XMMATRIX& view, const XMMATRIX& proj)
-{
-    SetViewProj(view, proj);
-
-    if (!g_initialized) return;
-
-    for (int i = 0; i < static_cast<int>(g_models.size()); ++i)
+    void Release(int handle)
     {
-        if (!g_models[i].used) continue;
-        DrawUfbx(i);
+        if (!IsValidHandle(handle)) return;
+
+        auto& md = g_models[handle];
+
+        if (md.pFbx)
+        {
+            ReleaseSharedModel(md.pFbx, md.fileName);
+            md.pFbx = nullptr;
+        }
+
+        md.pTransform = nullptr;
+        md.inUse = false;
+        md.fileName.clear();
     }
-}
 
-// ------------------------------------------------------------
-// スケルトン描画（同じく内部 view/proj 利用）
-// ------------------------------------------------------------
-void Model::DrawSkeletonAll()
-{
-    if (!g_initialized || !g_hasViewProj) return;
-
-    for (auto& m : g_models)
+    void AllRelease()
     {
-        if (!m.used || !m.ufbx) continue;
+        for (auto& md : g_models)
+        {
+            if (md.inUse && md.pFbx)
+            {
+                ReleaseSharedModel(md.pFbx, md.fileName);
+                md.pFbx = nullptr;
+                md.inUse = false;
+            }
+            md.pTransform = nullptr;
+            md.fileName.clear();
+        }
+        g_models.clear();
 
-        XMMATRIX world = m.transform.GetWorldMatrix();
-        m.ufbx->DrawSkeleton(world, g_viewMatrix, g_projMatrix);
+        g_modelCache.clear();
+        g_refCount.clear();
     }
-}
 
-// ------------------------------------------------------------
-// レイキャスト（FbxModel 側が対応したらここから呼ぶ）
-// ------------------------------------------------------------
-void Model::RayCast(int handle, RayCastData* data)
-{
-    // まだ FbxModel に RayCast がなければダミー
-    (void)handle;
-    (void)data;
+    void SetAnimFrame(int handle, int startFrame, int endFrame, float animSpeed)
+    {
+        if (!IsValidHandle(handle)) return;
+
+        auto& md = g_models[handle];
+
+        if (endFrame < startFrame)
+        {
+            int tmp = startFrame;
+            startFrame = endFrame;
+            endFrame = tmp;
+        }
+
+        md.startFrame = startFrame;
+        md.endFrame = endFrame;
+        md.animSpeed = animSpeed;
+        md.currentFrame = float(startFrame);
+    }
+
+    int GetAnimFrame(int handle)
+    {
+        if (!IsValidHandle(handle)) return 0;
+        return static_cast<int>(g_models[handle].currentFrame);
+    }
+
+    XMFLOAT3 GetBonePosition(int handle, std::string boneName)
+    {
+        if (!IsValidHandle(handle)) return XMFLOAT3(0, 0, 0);
+        // TODO: 後で実装
+        return XMFLOAT3(0, 0, 0);
+    }
+
+    XMFLOAT3 GetAnimBonePosition(int handle, std::string boneName)
+    {
+        if (!IsValidHandle(handle)) return XMFLOAT3(0, 0, 0);
+        // TODO: 後で実装
+        return XMFLOAT3(0, 0, 0);
+    }
+
+    void SetTransform(int handle, Transform& t)
+    {
+        if (!IsValidHandle(handle)) return;
+
+        g_models[handle].pTransform = &t;
+    }
+
+    XMMATRIX GetMatrix(int handle)
+    {
+        if (!IsValidHandle(handle))
+            return XMMatrixIdentity();
+
+        auto& md = g_models[handle];
+        if (md.pTransform)
+        {
+            return md.pTransform->GetWorldMatrix();
+        }
+        return XMMatrixIdentity();
+    }
+
+    void RayCast(int handle, RayCastData* data)
+    {
+        if (!IsValidHandle(handle) || !data) return;
+        // TODO: 後で FbxMesh 連携で実装
+    }
+
+    int GetAnimStackCount(int handle)
+    {
+        if (!IsValidHandle(handle)) return 0;
+
+        auto& md = g_models[handle];
+        const ufbx_scene* scene = md.pFbx ? md.pFbx->Scene() : nullptr;
+        if (!scene) return 0;
+
+        return (int)scene->anim_stacks.count;
+    }
+
+    std::string GetAnimStackName(int handle, int index)
+    {
+        if (!IsValidHandle(handle)) return {};
+
+        auto& md = g_models[handle];
+        const ufbx_scene* scene = md.pFbx ? md.pFbx->Scene() : nullptr;
+        if (!scene) return {};
+
+        if (index < 0 || (size_t)index >= scene->anim_stacks.count) return {};
+
+        const ufbx_anim_stack* stack = scene->anim_stacks.data[index];
+        if (!stack) return {};
+
+        // ufbx_string を std::string に変換
+        return std::string(stack->name.data, stack->name.length);
+    }
+
+    void SetAnimStack(int handle, int index)
+    {
+        if (!IsValidHandle(handle)) return;
+
+        auto& md = g_models[handle];
+        const ufbx_scene* scene = md.pFbx ? md.pFbx->Scene() : nullptr;
+        if (!scene) return;
+
+        if (index < 0 || (size_t)index >= scene->anim_stacks.count) {
+            // 不正な値は無視（デフォルト anim のまま）
+            return;
+        }
+
+        md.animStackIndex = index;
+
+        // 新しい AnimStack に切り替えたので、フレームを先頭に戻しておく
+        md.currentFrame = (float)md.startFrame;
+    }
+    void SetAnimStack(int handle, const std::string& stackName)
+    {
+        if (!IsValidHandle(handle)) return;
+
+        auto& md = g_models[handle];
+        const ufbx_scene* scene = md.pFbx ? md.pFbx->Scene() : nullptr;
+        if (!scene) return;
+
+        for (size_t i = 0; i < scene->anim_stacks.count; ++i) {
+            const ufbx_anim_stack* stack = scene->anim_stacks.data[i];
+            if (!stack) continue;
+
+            // ufbx_string と std::string を長さつき比較
+            if (stackName.size() == stack->name.length &&
+                std::memcmp(stackName.c_str(), stack->name.data, stack->name.length) == 0)
+            {
+                md.animStackIndex = (int)i;
+                md.currentFrame = (float)md.startFrame;
+                return;
+            }
+        }
+
+        // 見つからなかったら何もしない（デフォルト anim のまま）
+    }
+
 }

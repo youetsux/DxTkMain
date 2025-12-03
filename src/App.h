@@ -35,8 +35,7 @@ private:
     Renderer m_renderer;
     //Quad     m_quad;
 	//NDice    m_dice;
-	int hModel = -1;
-    int hModel2 = -1;
+
 
     bool m_ready = false;
 
