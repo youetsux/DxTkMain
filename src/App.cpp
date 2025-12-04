@@ -2,7 +2,7 @@
 #define NOMINMAX
 #include <windows.h>
 #include <DirectXMath.h>
-//#include "Dice.h"
+
 #include "App.h"
 #include "Model.h"
 #include <chrono>
@@ -53,7 +53,7 @@ namespace
 	double GetTotalTime() { return g_totalTime; }
 
 
-	std::vector<int> hModel = std::vector<int>(100, -1);
+	int hModel = -1;
 	int hModel2 = -1;
 	int hModel3 = -1;
 }
@@ -80,36 +80,17 @@ void App::Initialize(HWND hwnd, unsigned w, unsigned h)
 	Camera::SetTarget(XMVectorSet(0, 0, 150, 0));
 
 	Model::Initialize();
-
-	for (int i = 0;i < hModel.size();i++) {
-		hModel[i] = Model::Load(".\\Assets\\SillyDancing.fbx");//2475
-		Model::SetAnimStack(hModel[i], 1);
-		Model::SetAnimFrame(hModel[i], 0, 229, 1.0);
-	}
-	// 1 番目の AnimStack を使う
+	
+	hModel = Model::Load(".\\Assets\\SillyDancing.fbx");//2475
+	Model::SetAnimStack(hModel, 1);
+	Model::SetAnimFrame(hModel, 0, 229, 1.0);
 
 	hModel2 = Model::Load(".\\Assets\\Enemy.fbx");
-
-
-	hModel3 = Model::Load(".\\Assets\\TriAvater.fbx");//2475
-	// 1 番目の AnimStack を使う
-
-
 	Model::SetAnimFrame(hModel2, 0, 100, 1.0);
+	hModel3 = Model::Load(".\\Assets\\TriAvater.fbx");//2475
+
 	m_ready = true;
-
-
-	// ★タイマー初期化（ここから totalTime / deltaTime を計測開始）
-	// Initialize() のどこか
-	//if (!g_fbxLoaded)
-	//{
-	//    g_fbxLoaded = g_testFbx.Load(".\\Assets\\GS_MotionSet.fbx");
-	//}
-
-
 	ResetTimer();
-
-
 }
 
 void App::OnResize(unsigned w, unsigned h)
@@ -148,14 +129,11 @@ void App::Render()
 	XMMATRIX P = Camera::GetProjectionMatrix();
 
 
-	Transform t[100];
-	for (int i = 0;i < 100;i++) {
-		t[i].position_ = {(float)(250 + 15 - i*15), 0, 80};
-		t[i].rotate_ = { 0, 0, 0 };
-		t[i].scale_ = { 0.5f,0.5f, 0.5f };
-		t[i].Calclation();
-	}
-
+	Transform t;
+	t.position_ = { 50, 0, 20};
+	t.rotate_ = { 0, 0, 0 };
+	t.scale_ = { 0.5f,0.5f, 0.5f };
+	t.Calclation();
 
 	static Transform t2;
 	t2.position_ = { 0, 0, 0 };
@@ -168,45 +146,15 @@ void App::Render()
 	t3.rotate_.y += 5.0f;
 	t3.scale_ = { 0.7, 0.7, 0.7 };
 	t3.Calclation();
+
 	Model::SetTransform(hModel3, t3);
 	Model::Draw(hModel3);
-
-
-
-	for (int i = 0;i < 40;i++) {
-		Model::SetTransform(hModel[i], t[i]);
-		Model::Draw(hModel[i]);
-	}
-
+	
+	Model::SetTransform(hModel, t);
+	Model::Draw(hModel);
 
 	Model::SetTransform(hModel2, t2);
-
 	Model::Draw(hModel2);
-
-	//   Transform t2;
-	//   t2.position_ = { 0.0f,0.0f, -50.0f };
-	//   t2.rotate_ = { 0.0f, 0.0f, 0.0f };
-	//   t2.scale_ = { 10.0f, 10.0f, 10.0f };
-	//   //t.Calclation();
-	   //Model::SetViewProj(V, P);
-	//   
-	//   Model::SetTransform(hModel, t);
-
-
-	   // Render() の中
-	   //if (g_fbxLoaded)
-	   //{
-	   //    // ここは今の「timeSec」の作り方に合わせて
-	   //    double timeSec = GetTotalTime();/* GetTotalTime() なり、カウンタ/60.0 なり */;
-
-	   //    //g_testFbx.UpdateSkeletonAtTime(timeSec);
-
-	   //    XMMATRIX world = t.GetWorldMatrix();
-	   //    //g_testFbx.Draw(world, V, P);
-	   //}
-
-	//   static int fr = 0;;
-	   //Model::DrawUfbx(hModel, t, ++fr); // フレーム指定デモ
 
 	m_renderer.EndFrame();
 	m_renderer.Present();
