@@ -144,7 +144,7 @@ void App::Render()
 	static Transform t3;
 	t3.position_ = { 50, 0, 50 };
 	t3.rotate_.y += 5.0f;
-	t3.scale_ = { 0.7, 0.7, 0.7 };
+	t3.scale_ = { 0.7f, 0.7f, 0.7f };
 	t3.Calclation();
 
 	Model::SetTransform(hModel3, t3);
@@ -152,9 +152,12 @@ void App::Render()
 	
 	Model::SetTransform(hModel, t);
 	Model::Draw(hModel);
+	Model::DrawSkeleton(hModel);
 
 	Model::SetTransform(hModel2, t2);
 	Model::Draw(hModel2);
+
+
 
 	m_renderer.EndFrame();
 	m_renderer.Present();

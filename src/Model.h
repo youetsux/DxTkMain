@@ -11,6 +11,7 @@ namespace Model
     void Initialize();
     int  Load(std::string fileName);
     void Draw(int handle);
+    void DrawSkeleton(int handle);
     void Release(int handle);
     void AllRelease();
     void SetAnimFrame(int handle, int startFrame, int endFrame, float animSpeed);

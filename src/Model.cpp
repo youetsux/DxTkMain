@@ -162,70 +162,7 @@ namespace Model
         return h;
     }
 
-    //void Draw(int handle)
-    //{
-    //    if (!IsValidHandle(handle)) return;
-
-    //    auto& md = g_models[handle];
-
-    //    // デフォルトアニメ取得
-    //    const ufbx_anim* anim = md.pFbx->GetDefaultAnim();
-
-    //    // SetAnimFrame が設定されているかどうか
-    //    bool hasAnimSetting =
-    //        (md.endFrame > md.startFrame) && (md.animSpeed != 0.0f);
-
-    //    if (anim && hasAnimSetting)
-    //    {
-    //        // 1. アニメフレームを進める（外向きはフレーム基準）
-    //        md.currentFrame += md.animSpeed;
-
-    //        // 2. startFrame ～ endFrame でループ
-    //        float rangeLen = float(md.endFrame - md.startFrame + 1);
-    //        if (rangeLen <= 0.0f) rangeLen = 1.0f;
-
-    //        while (md.currentFrame > md.endFrame)
-    //        {
-    //            md.currentFrame -= rangeLen;
-    //        }
-    //        while (md.currentFrame < md.startFrame)
-    //        {
-    //            md.currentFrame += rangeLen;
-    //        }
-
-    //        // 3. フレーム → 時間変換（内部は時間基準）
-    //        constexpr double ANIM_FPS = 60.0;             // ★ ここを 60 に固定
-    //        const double secondsPerFrame = 1.0 / ANIM_FPS;
-
-    //        double animBegin = anim->time_begin;
-    //        double animEnd = anim->time_end;
-    //        double tSec = animBegin + double(md.currentFrame) * secondsPerFrame;
-
-    //        // 念のためクランプ（通常は endFrame <= 総フレーム数なら越えない）
-    //        if (tSec < animBegin) tSec = animBegin;
-    //        if (tSec > animEnd)   tSec = animEnd;
-
-    //        md.pFbx->UpdateSkeletonAtTime(anim, tSec);
-    //    }
-    //    else
-    //    {
-    //        // アニメ設定なし or アニメ自体なし → t=0 で固定
-    //        md.pFbx->UpdateSkeletonAtTime(0.0);
-    //    }
-
-    //    // ここから下は、Transform / Camera / Draw は今まで通り
-    //    XMMATRIX world = XMMatrixIdentity();
-    //    if (md.pTransform)
-    //    {
-    //        world = md.pTransform->GetWorldMatrix();
-    //    }
-
-    //    XMMATRIX view = Camera::GetViewMatrix();
-    //    XMMATRIX proj = Camera::GetProjectionMatrix();
-
-    //    md.pFbx->Draw(world, view, proj);
-    //}
-
+    
 
     void Model::Draw(int handle)
     {
@@ -297,6 +234,33 @@ namespace Model
 
         md.pFbx->Draw(world, view, proj);
     }
+
+    void DrawSkeleton(int handle)
+    {
+        if (!IsValidHandle(handle)) return;
+
+        auto& md = g_models[handle];
+        if (!md.pFbx) return;
+
+        using namespace DirectX;
+
+        // ワールド行列
+        XMMATRIX world = XMMatrixIdentity();
+        if (md.pTransform)
+        {
+            world = md.pTransform->GetWorldMatrix();
+        }
+
+        // カメラからビュー・プロジェクションを取得
+        XMMATRIX view = Camera::GetViewMatrix();
+        XMMATRIX proj = Camera::GetProjectionMatrix();
+
+        // FbxModel 側のスケルトン描画
+        md.pFbx->DrawSkeleton(world, view, proj);
+    }
+
+
+
 
     void Release(int handle)
     {
