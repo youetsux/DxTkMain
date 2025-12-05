@@ -20,7 +20,7 @@ void DeviceResources::CreateDeviceResources()
 {
     UINT flags = 0;
 #if defined(_DEBUG)
-    //flags |= D3D11_CREATE_DEVICE_DEBUG;
+    flags |= D3D11_CREATE_DEVICE_DEBUG;
 #endif
     D3D_FEATURE_LEVEL levels[] = { D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0 };
     D3D_FEATURE_LEVEL created = {};
@@ -94,5 +94,5 @@ void DeviceResources::WindowSizeChanged(unsigned int w, unsigned int h)
 
 void DeviceResources::Present()
 {
-    m_swapChain->Present(1, 0);
+    m_swapChain->Present(0, 0);
 }

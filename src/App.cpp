@@ -5,10 +5,10 @@
 
 #include "App.h"
 #include "Model.h"
-#include <chrono>
-//#include "FbxModel.h"
+
 #include "Transform.h"
 #include <vector>
+#include "EngineTime.h"
 
 using namespace DirectX;
 
@@ -19,39 +19,6 @@ using namespace DirectX;
 // ------------------------------------------------------------
 namespace
 {
-	using Clock = std::chrono::steady_clock;
-
-	Clock::time_point g_startTime;
-	Clock::time_point g_prevTime;
-	double            g_totalTime = 0.0;  // 起動からの経過時間 [秒]
-	double            g_deltaTime = 0.0;  // 直近フレームの経過時間 [秒]
-
-	// タイマー初期化（起動 / リサイズ時など）
-	void ResetTimer()
-	{
-		g_startTime = g_prevTime = Clock::now();
-		g_totalTime = 0.0;
-		g_deltaTime = 0.0;
-	}
-
-	// 1 フレームごとに呼んで、delta / total を更新
-	void TickTimer()
-	{
-		const Clock::time_point now = Clock::now();
-
-		g_deltaTime = std::chrono::duration<double>(now - g_prevTime).count();
-		g_totalTime = std::chrono::duration<double>(now - g_startTime).count();
-
-		g_prevTime = now;
-
-		// 安全用：極端に大きな delta が出たときは上限をかけてもよい
-		// if (g_deltaTime > 0.1) g_deltaTime = 0.1; // 例: 最大 0.1 秒(=10fps)まで
-	}
-
-	// 必要なら App.cpp 内から参照しやすいように getter も用意
-	double GetDeltaTime() { return g_deltaTime; }
-	double GetTotalTime() { return g_totalTime; }
-
 
 	int hModel = -1;
 	int hModel2 = -1;
@@ -86,11 +53,12 @@ void App::Initialize(HWND hwnd, unsigned w, unsigned h)
 	Model::SetAnimFrame(hModel, 0, 229, 1.0);
 
 	hModel2 = Model::Load(".\\Assets\\Enemy.fbx");
-	Model::SetAnimFrame(hModel2, 0, 100, 1.0);
+	//Model::SetAnimFrame(hModel2, 0, 100, 1.0);
 	hModel3 = Model::Load(".\\Assets\\TriAvater.fbx");//2475
 
 	m_ready = true;
-	ResetTimer();
+	// ★ フレームタイマー初期化
+	EngineTime::Reset();
 }
 
 void App::OnResize(unsigned w, unsigned h)
@@ -106,19 +74,21 @@ void App::OnResize(unsigned w, unsigned h)
 
 void App::Update()
 {
-	Camera::Update();
-	static float dt = 1.0f / 60.0f; // 仮固定値（本来は経過時間を計測）
-	if (!m_ready) return;
 
+	//static float dt = 1.0f / 60.0f; // 仮固定値（本来は経過時間を計測）
+	if (!m_ready) return;
+	EngineTime::Tick();
+	Camera::Update();
 	// デモ用途：回転角を更新（必要なければ削除OK）
+	//OutputDebugStringA(
+	//(std::string("dt=") + std::to_string(EngineTime::DeltaTime()) + "\n").c_str());
 	//m_angle += dt * 10.0f; // 45°/s
 }
 
 void App::Render()
 {
 	if (!m_ready) return;
-	// ★1フレーム分の経過時間を更新
-	TickTimer();
+
 
 	m_renderer.BeginFrame();
 
@@ -147,15 +117,15 @@ void App::Render()
 	t3.scale_ = { 0.7f, 0.7f, 0.7f };
 	t3.Calclation();
 
-	Model::SetTransform(hModel3, t3);
-	Model::Draw(hModel3);
+	//Model::SetTransform(hModel3, t3);
+	//Model::Draw(hModel3);
 	
 	Model::SetTransform(hModel, t);
 	Model::Draw(hModel);
 	Model::DrawSkeleton(hModel);
 
-	Model::SetTransform(hModel2, t2);
-	Model::Draw(hModel2);
+	//Model::SetTransform(hModel2, t2);
+	//Model::Draw(hModel2);
 
 
 

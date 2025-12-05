@@ -132,6 +132,7 @@
     <ClCompile Include="src\Camera.cpp" />
     <ClCompile Include="src\DeviceResources.cpp" />
     <ClCompile Include="src\Dice.cpp" />
+    <ClCompile Include="src\EngineTime.cpp" />
     <ClCompile Include="src\FbxMesh.cpp" />
     <ClCompile Include="src\FbxModel.cpp" />
     <ClCompile Include="src\FbxSkeleton.cpp" />
@@ -151,6 +152,7 @@
     <ClInclude Include="src\Camera.h" />
     <ClInclude Include="src\DeviceResources.h" />
     <ClInclude Include="src\Dice.h" />
+    <ClInclude Include="src\EngineTime.h" />
     <ClInclude Include="src\FbxMesh.h" />
     <ClInclude Include="src\FbxModel.h" />
     <ClInclude Include="src\FbxSkeleton.h" />

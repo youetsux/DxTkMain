@@ -4,6 +4,7 @@
 
 #include <vector>
 #include <string>
+#include "EngineTime.h"  // ★追加
 #include <unordered_map>
 
 using namespace DirectX;
@@ -27,7 +28,7 @@ namespace
         float currentFrame = 0.0f;
 
         int animStackIndex = -1;
-
+        double animTimeSec = 0.0;   // ★ 追加：内部用のアニメ時間（秒）
         bool inUse = false;
     };
 
@@ -173,7 +174,7 @@ namespace Model
 
         const ufbx_scene* scene = md.pFbx ? md.pFbx->Scene() : nullptr;
 
-        // ★ 1) 使うアニメを決める（AnimStack 指定があれば優先）
+        // 1) 使うアニメを決める（AnimStack 指定があれば優先）
         const ufbx_anim* anim = nullptr;
         if (scene) {
             if (md.animStackIndex >= 0 &&
@@ -181,11 +182,11 @@ namespace Model
             {
                 const ufbx_anim_stack* stack = scene->anim_stacks.data[md.animStackIndex];
                 if (stack) {
-                    anim = stack->anim;          // AnimStack に対応する ufbx_anim
+                    anim = stack->anim;  // AnimStack に対応する ufbx_anim
                 }
             }
 
-            // AnimStack 未指定 or 無効 → 既存のデフォルトアニメ
+            // AnimStack 未指定 or 無効 → デフォルトアニメ
             if (!anim) {
                 anim = md.pFbx->GetDefaultAnim();
             }
@@ -196,29 +197,40 @@ namespace Model
 
         if (anim && hasAnimSetting)
         {
-            // ★ 2) 外向きはフレーム基準
-            md.currentFrame += md.animSpeed;
+            // ★ここだけ「時間ベース」に変える
+            const double dtSec = EngineTime::DeltaTime();      // 秒
+            const double framesPerSec = ANIM_FPS;                // 60fps 基準
+            const double deltaFrames = dtSec * framesPerSec * double(md.animSpeed);
 
+            // フレーム番号を時間に応じて増やす
+            md.currentFrame += static_cast<float>(deltaFrames);
+
+            // 範囲 [startFrame, endFrame] 内でループ
             float rangeLen = float(md.endFrame - md.startFrame + 1);
             if (rangeLen <= 0.0f) rangeLen = 1.0f;
 
-            while (md.currentFrame > md.endFrame) md.currentFrame -= rangeLen;
+            while (md.currentFrame > md.endFrame)   md.currentFrame -= rangeLen;
             while (md.currentFrame < md.startFrame) md.currentFrame += rangeLen;
 
-            // ★ 3) 内部では時間基準（フレーム → 秒）
+            // ここから先の「frame → time 変換」は旧ロジックと同じ
             const double secondsPerFrame = 1.0 / ANIM_FPS;
-            double tSec = anim->time_begin + double(md.currentFrame) * secondsPerFrame;
+            double tSec = anim->time_begin
+                + double(md.currentFrame) * secondsPerFrame;
 
             md.pFbx->UpdateSkeletonAtTime(anim, tSec);
         }
         else if (anim)
         {
-            // アニメ設定がない場合でも、指定アニメの先頭姿勢で止めておく
-            md.pFbx->UpdateSkeletonAtTime(anim, anim->time_begin);
+            // アニメはあるが SetAnimFrame されていない → 先頭フレームで固定
+            md.currentFrame = static_cast<float>(md.startFrame);
+            const double secondsPerFrame = 1.0 / ANIM_FPS;
+            double tSec = anim->time_begin
+                + double(md.currentFrame) * secondsPerFrame;
+            md.pFbx->UpdateSkeletonAtTime(anim, tSec);
         }
         else
         {
-            // アニメ自体がない場合は t=0 で固定（従来と同じ）
+            // アニメ自体がない場合
             md.pFbx->UpdateSkeletonAtTime(0.0);
         }
 
@@ -234,6 +246,7 @@ namespace Model
 
         md.pFbx->Draw(world, view, proj);
     }
+
 
     void DrawSkeleton(int handle)
     {
@@ -306,15 +319,14 @@ namespace Model
 
         if (endFrame < startFrame)
         {
-            int tmp = startFrame;
-            startFrame = endFrame;
-            endFrame = tmp;
+            std::swap(startFrame, endFrame);
         }
 
         md.startFrame = startFrame;
         md.endFrame = endFrame;
         md.animSpeed = animSpeed;
         md.currentFrame = float(startFrame);
+        md.animTimeSec = 0.0;        // ★内部時間もリセット
     }
 
     int GetAnimFrame(int handle)
