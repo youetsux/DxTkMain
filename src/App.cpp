@@ -53,7 +53,7 @@ void App::Initialize(HWND hwnd, unsigned w, unsigned h)
 	Model::SetAnimFrame(hModel, 0, 229, 1.0);
 
 	hModel2 = Model::Load(".\\Assets\\Enemy.fbx");
-	//Model::SetAnimFrame(hModel2, 0, 100, 1.0);
+	Model::SetAnimFrame(hModel2, 0, 100, 1.0);
 	hModel3 = Model::Load(".\\Assets\\TriAvater.fbx");//2475
 
 	m_ready = true;
@@ -77,7 +77,6 @@ void App::Update()
 
 	//static float dt = 1.0f / 60.0f; // 仮固定値（本来は経過時間を計測）
 	if (!m_ready) return;
-	EngineTime::Tick();
 	Camera::Update();
 	// デモ用途：回転角を更新（必要なければ削除OK）
 	//OutputDebugStringA(
@@ -117,15 +116,15 @@ void App::Render()
 	t3.scale_ = { 0.7f, 0.7f, 0.7f };
 	t3.Calclation();
 
-	//Model::SetTransform(hModel3, t3);
-	//Model::Draw(hModel3);
+	Model::SetTransform(hModel3, t3);
+	Model::Draw(hModel3);
 	
 	Model::SetTransform(hModel, t);
 	Model::Draw(hModel);
-	Model::DrawSkeleton(hModel);
+	//Model::DrawSkeleton(hModel);
 
-	//Model::SetTransform(hModel2, t2);
-	//Model::Draw(hModel2);
+	Model::SetTransform(hModel2, t2);
+	Model::Draw(hModel2);
 
 
 

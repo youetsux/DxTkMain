@@ -47,7 +47,7 @@ namespace
         std::vector<FbxMesh::VertexPNT2>& out_vertices)
     {
         size_t n = bind_vertices.size();
-        out_vertices.resize(n);
+        //out_vertices.resize(n);
 
         for (size_t v = 0; v < n; ++v) {
             const FbxMesh::VertexInfluence& inf = influences[v];
@@ -584,7 +584,7 @@ void FbxMesh::Draw(
     // CPU スキニング（ボーン情報とウェイトがある場合のみ）
     if (!mesh_.influences_.empty() && !mesh_.bind_vertices_.empty()) {
         auto& skin_mats = skeleton.SkinMatrices();
-        skin_mats.resize(skeleton.Bones().size());
+       //skin_mats.resize(skeleton.Bones().size());
 
         for (size_t i = 0; i < skeleton.Bones().size(); ++i) {
             XMMATRIX W =

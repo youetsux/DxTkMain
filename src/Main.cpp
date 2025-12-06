@@ -5,6 +5,8 @@
 #include "App.h"
 #include <mmsystem.h> // timeBeginPeriod / timeEndPeriod
 #include <cmath>
+#include "EngineTime.h"
+
 #pragma comment(lib, "winmm.lib")
 
 static App g_app;
@@ -70,9 +72,9 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
     double accumulator = 0.0;
 
     // FPS 表示変数
-    double fpsAccum = 0.0;
-    int fpsFrames = 0;
-    const double fpsUpdateInterval = 0.5;
+    double fpsTimeAccum = 0.0;
+    int    fpsFrames = 0;
+    const double fpsUpdateInterval = 1.0;   // 1秒ごとの平均FPS
     wchar_t titleBuf[256];
     const wchar_t* baseTitle = L"MyApp";
 
@@ -90,45 +92,48 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
         // 時刻更新
         LARGE_INTEGER nowCnt; QueryPerformanceCounter(&nowCnt);
         double now = double(nowCnt.QuadPart) / double(freq.QuadPart);
-        double elapsed = now - prevTime;
+        double elapsed = now - prevTime;      // ★実測フレーム時間
         prevTime = now;
+
+        // ★ ここで EngineTime を更新（フレームごとに1回だけ）
+        EngineTime::Tick(elapsed);
 
         // Update 固定（accumulator ベース）
         accumulator += elapsed;
         const int maxUpdatesPerFrame = 5;
         int updates = 0;
         while (accumulator >= targetDt && updates < maxUpdatesPerFrame) {
-            g_app.Update(); // 既存の Update をそのまま使用
+            g_app.Update();
             accumulator -= targetDt;
             ++updates;
         }
-        if (updates >= maxUpdatesPerFrame) accumulator = 0.0; // 追いつけない場合は切る
+        if (updates >= maxUpdatesPerFrame) accumulator = 0.0;
 
         // 次の描画時刻を計算
         double nextRenderTime = lastRenderTime + targetDt;
         if (now < nextRenderTime) {
-            // まだ早い → 速ければ休む（Sleep + spin）
             SleepUntil(nextRenderTime, spinThreshold, freq);
-            // After SleepUntil, set now to current time
             QueryPerformanceCounter(&nowCnt);
             now = double(nowCnt.QuadPart) / double(freq.QuadPart);
         }
 
-        // 描画（既存の g_app.Render() をそのまま呼ぶ）
-        g_app.Render(); // ここは変更しない（既存実装を使用する）
+        // 描画
+        g_app.Render();
 
         // 実描画時刻を記録
         LARGE_INTEGER afterCnt; QueryPerformanceCounter(&afterCnt);
         lastRenderTime = double(afterCnt.QuadPart) / double(freq.QuadPart);
 
-        // FPS bookkeeping
-        ++fpsFrames;
-        fpsAccum += targetDt; // targetDt ベースでも良い（または実測時間を使う）
-        if (fpsAccum >= fpsUpdateInterval) {
-            double fps = double(fpsFrames) / fpsAccum;
+        // ★ FPS計測：実測elapsedで1秒ごとの平均FPSを出す
+        fpsFrames++;
+        fpsTimeAccum += elapsed;   // ここは targetDt ではなく elapsed
+
+        if (fpsTimeAccum >= fpsUpdateInterval) {
+            double fps = double(fpsFrames) / fpsTimeAccum;
             swprintf_s(titleBuf, _countof(titleBuf), L"%s - FPS: %.1f", baseTitle, fps);
             SetWindowTextW(hwnd, titleBuf);
-            fpsAccum = 0.0;
+
+            fpsTimeAccum = 0.0;
             fpsFrames = 0;
         }
     }
