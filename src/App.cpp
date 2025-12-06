@@ -5,142 +5,195 @@
 
 #include "App.h"
 #include "Model.h"
-
 #include "Transform.h"
-#include <vector>
 #include "EngineTime.h"
+#include "Gfx.h"
+#include "Camera.h"
+
+#include <vector>
 
 using namespace DirectX;
 
-
-
 // ------------------------------------------------------------
-// フレームタイマー（App.cpp 内だけで使う）
+// App.cpp 内だけで使うグローバル
 // ------------------------------------------------------------
 namespace
 {
+    // 並べるモデル数（必要に応じて変えてください）
+    constexpr int MODEL_NUM = 5;
 
-	int hModel = -1;
-	int hModel2 = -1;
-	int hModel3 = -1;
+    // SillyDancing 用のモデルハンドル配列
+    int g_hSilly[MODEL_NUM];
+
+    // 各モデルの Transform
+    Transform g_sillyTransform[MODEL_NUM];
+
+    // 他のモデル（必要なら残す）
+    int g_hEnemy = -1;
+    int g_hTriAvatar = -1;
 }
 
-
+// ------------------------------------------------------------
+// 初期化
+// ------------------------------------------------------------
 void App::Initialize(HWND hwnd, unsigned w, unsigned h)
 {
-	// 1) DeviceResources を App が作って所有
-	m_dev = std::make_shared<DX::DeviceResources>();
-	m_dev->SetWindow(hwnd, w, h);
-	m_dev->CreateDeviceResources();
-	m_dev->CreateWindowSizeDependentResources();
+    // 1) DeviceResources を App が作って所有
+    m_dev = std::make_shared<DX::DeviceResources>();
+    m_dev->SetWindow(hwnd, w, h);
+    m_dev->CreateDeviceResources();
+    m_dev->CreateWindowSizeDependentResources();
 
-	// 2) Gfx に登録（以降 Dev/Ctx/RTV/DSV/Width/Height がどこからでも使える）
-	Gfx::Init(m_dev.get());
+    // 2) Gfx に登録
+    Gfx::Init(m_dev.get());
 
-	// 3) Renderer 初期化（デバイス非所有）
-	m_renderer.Initialize();
+    // 3) Renderer 初期化
+    m_renderer.Initialize();
 
-	// 4) カメラ初期化（ページ準拠API）
-	Camera::Initialize();
-	Camera::SetPerspective(XMConvertToRadians(40.0f), float(w) / float(h));
-	Camera::SetPosition(XMVectorSet(0, 150, -300, 0));
-	Camera::SetTarget(XMVectorSet(0, 0, 150, 0));
+    // 4) カメラ初期化
+    Camera::Initialize();
+    Camera::SetPerspective(XMConvertToRadians(40.0f), float(w) / float(h));
+    Camera::SetPosition(XMVectorSet(0, 150, -300, 0));
+    Camera::SetTarget(XMVectorSet(0, 0, 150, 0));
 
-	Model::Initialize();
-	
-	hModel = Model::Load(".\\Assets\\SillyDancing.fbx");//2475
-	Model::SetAnimStack(hModel, 1);
-	Model::SetAnimFrame(hModel, 0, 229, 1.0);
+    // モデル管理初期化
+    Model::Initialize();
 
-	hModel2 = Model::Load(".\\Assets\\Enemy.fbx");
-	Model::SetAnimFrame(hModel2, 0, 100, 1.0);
-	hModel3 = Model::Load(".\\Assets\\TriAvater.fbx");//2475
+    // SillyDancing を MODEL_NUM 体ロード（中身は共有される）
+    for (int i = 0; i < MODEL_NUM; ++i)
+    {
+        g_hSilly[i] = Model::Load(".\\Assets\\SillyDancing.fbx");
+        // 2つ目の AnimStack を使うならそのまま
+        Model::SetAnimStack(g_hSilly[i], 1);
+        // 0〜229 フレームを 1.0 倍速でループ
+        Model::SetAnimFrame(g_hSilly[i], 0, 229, 1.0f);
+    }
 
-	m_ready = true;
-	// ★ フレームタイマー初期化
-	EngineTime::Reset();
+    // 横一列に並べる Transform を設定
+    {
+        // 中央基準に左右へ等間隔に並べる
+        const float spacing = 20.0f;      // モデル間の間隔
+        const float baseZ = 20.0f;      // 手前/奥の位置
+        const float scale = 0.5f;
+
+        const float centerIndex = (MODEL_NUM - 1) * 0.5f;
+
+        for (int i = 0; i < MODEL_NUM; ++i)
+        {
+            float offset = float(i) - centerIndex; // -...0...+
+            float x = offset * spacing;
+
+            g_sillyTransform[i].position_ = { x, 0.0f, baseZ };
+            g_sillyTransform[i].rotate_ = { 0.0f, 0.0f, 0.0f };
+            g_sillyTransform[i].scale_ = { scale, scale, scale };
+        }
+    }
+
+    // 他モデルが必要ならここでロード
+    g_hEnemy = Model::Load(".\\Assets\\Enemy.fbx");
+    Model::SetAnimFrame(g_hEnemy, 0, 100, 1.0f);
+
+    g_hTriAvatar = Model::Load(".\\Assets\\TriAvater.fbx");
+    // TriAvatar は今回は静的でもよいなら SetAnimFrame は省略可
+
+    m_ready = true;
+
+    // フレームタイマー初期化
+    EngineTime::Reset();
 }
 
+// ------------------------------------------------------------
+// リサイズ
+// ------------------------------------------------------------
 void App::OnResize(unsigned w, unsigned h)
 {
-	if (!m_ready || w == 0 || h == 0) return;
+    if (!m_ready || w == 0 || h == 0) return;
 
-	// RTV/DSV等のサイズ依存リソースを更新
-	m_dev->WindowSizeChanged(w, h);
-
-	// カメラのアスペクト更新（使っていれば）
-	Camera::OnResize(w, h);
+    m_dev->WindowSizeChanged(w, h);
+    Camera::OnResize(w, h);
 }
 
+// ------------------------------------------------------------
+// 更新
+// ------------------------------------------------------------
 void App::Update()
 {
+    if (!m_ready) return;
 
-	//static float dt = 1.0f / 60.0f; // 仮固定値（本来は経過時間を計測）
-	if (!m_ready) return;
-	Camera::Update();
-	// デモ用途：回転角を更新（必要なければ削除OK）
-	//OutputDebugStringA(
-	//(std::string("dt=") + std::to_string(EngineTime::DeltaTime()) + "\n").c_str());
-	//m_angle += dt * 10.0f; // 45°/s
+    // EngineTime::Tick() は WinMain 側で呼んでいる前提
+    Camera::Update();
+
+    // 回転させたい場合はここで Transform をいじる
+    // 例：全員を少しずつ Y 回転させる
+     const float rotSpeed = XMConvertToRadians(1.0f); // 10°/秒
+     float dt = (float)EngineTime::DeltaTime();
+     for (int i = 0; i < MODEL_NUM; ++i) {
+         g_sillyTransform[i].rotate_.y += rotSpeed * dt;
+     }
 }
 
+// ------------------------------------------------------------
+// 描画
+// ------------------------------------------------------------
 void App::Render()
 {
-	if (!m_ready) return;
+    if (!m_ready) return;
 
+    m_renderer.BeginFrame();
 
-	m_renderer.BeginFrame();
+    // カメラ行列（今は Model::Draw の中で Camera 取得しているので、
+    // ここで V/P を使わなくてもよい）
+    XMMATRIX V = Camera::GetViewMatrix();
+    XMMATRIX P = Camera::GetProjectionMatrix();
+    (void)V; (void)P;
 
-	// WVP を App 側で合成して Quad に渡す（Quad がパイプラインをバインド）
-	//XMMATRIX Wy = XMMatrixRotationY(m_angle);
-	//XMMATRIX Wx = XMMatrixRotationX(m_angle/3.0f);
-	XMMATRIX V = Camera::GetViewMatrix();
-	XMMATRIX P = Camera::GetProjectionMatrix();
+    // SillyDancing を横一列に描画
+    for (int i = 0; i < MODEL_NUM; ++i)
+    {
+        // 毎フレームワールド行列を更新
+        g_sillyTransform[i].Calclation();
 
+        Model::SetTransform(g_hSilly[i], g_sillyTransform[i]);
+        Model::Draw(g_hSilly[i]);
+        // スケルトンを重ねて描きたい場合は:
+        // Model::DrawSkeleton(g_hSilly[i]);
+    }
 
-	Transform t;
-	t.position_ = { 50, 0, 20};
-	t.rotate_ = { 0, 0, 0 };
-	t.scale_ = { 0.5f,0.5f, 0.5f };
-	t.Calclation();
+    // ついでに他モデルも描画したければここで
+    // （位置は適当に）
+    {
+        static Transform tEnemy;
+        tEnemy.position_ = { 0.0f, 0.0f, -100.0f };
+        tEnemy.scale_ = { 10.0f, 10.0f, 10.0f };
+        tEnemy.Calclation();
 
-	static Transform t2;
-	t2.position_ = { 0, 0, 0 };
-	t2.rotate_.y = t2.rotate_.y + 1.0f;
-	t2.scale_ = { 10,10, 10 };
-	t2.Calclation();
+        Model::SetTransform(g_hEnemy, tEnemy);
+        Model::Draw(g_hEnemy);
 
-	static Transform t3;
-	t3.position_ = { 50, 0, 50 };
-	t3.rotate_.y += 5.0f;
-	t3.scale_ = { 0.7f, 0.7f, 0.7f };
-	t3.Calclation();
+        static Transform tri;
+        tri.position_ = { 5.0f, 0.0f, 50.0f };
+        tri.scale_ = { 1.0f, 1.0f, 1.0f };
+        tri.rotate_.y += 1;
+        tri.Calclation();
 
-	Model::SetTransform(hModel3, t3);
-	Model::Draw(hModel3);
-	
-	Model::SetTransform(hModel, t);
-	Model::Draw(hModel);
-	//Model::DrawSkeleton(hModel);
+       
+        Model::SetTransform(g_hTriAvatar, tri);
+        Model::Draw(g_hTriAvatar);
 
-	Model::SetTransform(hModel2, t2);
-	Model::Draw(hModel2);
+    }
 
-
-
-	m_renderer.EndFrame();
-	m_renderer.Present();
+    m_renderer.EndFrame();
+    m_renderer.Present();
 }
 
+// ------------------------------------------------------------
+// 終了
+// ------------------------------------------------------------
 void App::Shutdown()
 {
-	if (!m_ready) return;
+    if (!m_ready) return;
 
-	// 先に Gfx を外す（ダングリング防止）
-	Gfx::Reset();
-
-	// 所有リソースを破棄
-	m_renderer = Renderer{};
-
-	m_ready = false;
+    Gfx::Reset();
+    m_renderer = Renderer{};
+    m_ready = false;
 }

@@ -13,14 +13,25 @@
 #include <cfloat>
 
 #include <WICTextureLoader.h>
-#include <Effects.h>        // ★追加: BasicEffect の実体
-#include <CommonStates.h>   // ★追加: CommonStates の実体
+#include <Effects.h>
+#include <CommonStates.h>
 
 #include "Gfx.h"
 #include "ufbx.h"
 #include "UfbxUtil.h"
 
 using Microsoft::WRL::ComPtr;
+
+//------------------------------------------------------------
+// ビルド用コンテキスト
+//------------------------------------------------------------
+struct BuildContext
+{
+    const ufbx_mesh* mesh = nullptr;
+    const ufbx_vertex_vec2* uvv = nullptr;
+    const std::vector<FbxMesh::VertexInfluence>* infl_per_vtx = nullptr;
+
+};
 
 namespace
 {
@@ -37,63 +48,164 @@ namespace
         return a.second > b.second;
     }
 
+ 
+
     // ------------------------------------------------------------
-    // CPU スキニング
+    // スキン情報を構築（1 メッシュ単位）
     // ------------------------------------------------------------
-    void ApplySkinCPU(
-        const std::vector<XMMATRIX>& skin_mats,
-        const std::vector<FbxMesh::VertexInfluence>& influences,
-        const std::vector<FbxMesh::VertexPNT2>& bind_vertices,
-        std::vector<FbxMesh::VertexPNT2>& out_vertices)
+    void BuildInfluencesForMesh(
+        const ufbx_mesh* mesh,
+        const std::unordered_map<const ufbx_node*, uint16_t>& bone_index_map,
+        std::vector<FbxMesh::VertexInfluence>& infl_per_vtx)
     {
-        size_t n = bind_vertices.size();
-        //out_vertices.resize(n);
+        infl_per_vtx.clear();
 
-        for (size_t v = 0; v < n; ++v) {
-            const FbxMesh::VertexInfluence& inf = influences[v];
+        if (!mesh || mesh->skin_deformers.count == 0) {
+            return;
+        }
 
-            XMVECTOR P = XMVectorZero(); // 合成された位置
-            XMVECTOR N = XMVectorZero(); // 合成された法線
-            bool any = false;            // 1つでも有効なボーンがあったか
+        infl_per_vtx.assign(mesh->num_vertices, FbxMesh::VertexInfluence());
 
-            for (int k = 0; k < 4; ++k) {
-                float    w = inf.weight[k];
-                uint16_t b = inf.bone[k];
+        const ufbx_skin_deformer* skin = mesh->skin_deformers.data[0];
+        const ufbx_skin_cluster_list& clusters = skin->clusters;
+        const ufbx_skin_vertex_list& vtx_list = skin->vertices;
+        const ufbx_skin_weight_list& w_list = skin->weights;
 
-                if (w <= 0.0f)             continue; // ウェイト0は無視
-                if (b >= skin_mats.size()) continue; // 不正なボーン番号も無視
+        // 一旦「ボーン番号＋ウェイト」のリストをためてから 4 本に絞る
+        std::vector<std::vector<std::pair<uint16_t, float>>> acc(mesh->num_vertices);
 
-                const XMMATRIX& B = skin_mats[b];
-                XMVECTOR W = XMVectorReplicate(w);   // w → {w,w,w,w}
+        for (size_t v = 0; v < vtx_list.count; ++v) {
+            const ufbx_skin_vertex sv = vtx_list.data[v];
+            uint32_t begin = sv.weight_begin;
+            uint32_t n = sv.num_weights;
 
-                // P += (B * pos) * w
-                P = XMVectorMultiplyAdd(
-                    UfbxUtil::TransformPosition(bind_vertices[v].pos, B),
-                    W, P);
+            for (uint32_t k = 0; k < n; ++k) {
+                const ufbx_skin_weight w = w_list.data[begin + k];
+                uint32_t ci = w.cluster_index;
+                if (ci >= clusters.count) continue;
 
-                // N += (B * nrm) * w
-                N = XMVectorMultiplyAdd(
-                    UfbxUtil::TransformNormal(bind_vertices[v].nrm, B),
-                    W, N);
+                const ufbx_skin_cluster* cl = clusters.data[ci];
+                if (!cl || !cl->bone_node) continue;
 
-                any = true;
+                auto it = bone_index_map.find(cl->bone_node);
+                if (it == bone_index_map.end()) continue;
+
+                acc[v].push_back(std::make_pair(it->second, (float)w.weight));
+            }
+        }
+
+        // 4 本までに絞って正規化
+        for (size_t v = 0; v < acc.size(); ++v) {
+            auto& list = acc[v];
+            if (list.empty()) continue;
+
+            std::sort(list.begin(), list.end(), CompareBoneWeightPair);
+
+            if (list.size() > 4) {
+                list.resize(4);
             }
 
-            // どのボーンからも影響がなければ、元の頂点を使う
-            if (!any) {
-                out_vertices[v] = bind_vertices[v];
-                continue;
-            }
+            float sum = 0.0f;
+            for (auto& p : list) sum += p.second;
+            if (sum <= 0.0f) sum = 1.0f;
 
-            // 合成結果を構造体に書き戻す
-            FbxMesh::VertexPNT2 sv = bind_vertices[v];
-            XMStoreFloat3(&sv.pos, P);
-            N = XMVector3Normalize(N);
-            XMStoreFloat3(&sv.nrm, N);
-            out_vertices[v] = sv;
+            FbxMesh::VertexInfluence vi;
+            size_t n_infl = list.size();
+            if (n_infl > 4) n_infl = 4;
+
+            for (size_t i = 0; i < n_infl; ++i) {
+                vi.bone[i] = list[i].first;
+                vi.weight[i] = list[i].second / sum;
+            }
+            infl_per_vtx[v] = vi;
         }
     }
+
+    // ------------------------------------------------------------
+    // マテリアル／テクスチャに対応した UV セットを選ぶ
+    // ------------------------------------------------------------
+    const ufbx_vertex_vec2* ChooseUVSet(
+        const ufbx_mesh* mesh,
+        const ufbx_material* mat,
+        const ufbx_vertex_vec2* base_uv)
+    {
+        if (!mesh) return base_uv;
+
+        const ufbx_texture* tex_for_uv = UfbxUtil::GetDiffuseTexture(mat);
+        const ufbx_vertex_vec2* uvv = base_uv;
+
+        if (tex_for_uv && tex_for_uv->uv_set.length > 0) {
+            const ufbx_vertex_vec2* alt =
+                UfbxUtil::ResolveUVByName(mesh, tex_for_uv->uv_set);
+            if (alt && alt->exists) {
+                uvv = alt;
+            }
+        }
+        return uvv;
+    }
 } // anonymous namespace
+
+//================================================================
+// FbxMesh::EmitCorner（1 コーナーから VertexPNT2 を組み立てて push）
+//================================================================
+void FbxMesh::EmitCorner(
+    BuildContext& ctx,
+    uint32_t corner,
+    uint32_t vtx)
+{
+    using namespace DirectX;
+
+    const ufbx_mesh* mesh = ctx.mesh;
+
+    // 位置
+    uint32_t pi = UfbxUtil::ValueIndexOf(mesh->vertex_position, corner, vtx);
+    ufbx_vec3 p = mesh->vertex_position.values.data[pi];
+    XMFLOAT3 P((float)p.x, (float)p.y, (float)p.z);
+
+    // AABB 更新
+    bounds_.WrapBox(P);
+
+    // 法線
+    XMFLOAT3 N(0.0f, 1.0f, 0.0f);
+    if (mesh->vertex_normal.exists) {
+        uint32_t ni2 = UfbxUtil::ValueIndexOf(mesh->vertex_normal, corner, vtx);
+        ufbx_vec3 n = mesh->vertex_normal.values.data[ni2];
+
+        double len = std::sqrt(n.x * n.x + n.y * n.y + n.z * n.z);
+        if (len > 0.0) {
+            double inv = 1.0 / len;
+            N.x = (float)(n.x * inv);
+            N.y = (float)(n.y * inv);
+            N.z = (float)(n.z * inv);
+        }
+    }
+
+    // UV（V だけ反転）
+    XMFLOAT2 T(0.0f, 0.0f);
+    if (ctx.uvv && ctx.uvv->exists) {
+        uint32_t ti = UfbxUtil::ValueIndexOf(*ctx.uvv, corner, vtx);
+        ufbx_vec2 t = ctx.uvv->values.data[ti];
+        T.x = (float)t.x;
+        T.y = (float)(1.0 - t.y);
+    }
+
+    VertexPNT2 vtx_out;
+    vtx_out.pos = P;
+    vtx_out.nrm = N;
+    vtx_out.uv = T;
+
+    VertexInfluence vi{};
+    if (ctx.infl_per_vtx &&
+        !ctx.infl_per_vtx->empty() &&
+        vtx < ctx.infl_per_vtx->size())
+    {
+        vi = (*ctx.infl_per_vtx)[vtx];
+    }
+
+    mesh_.influences_.push_back(vi);
+    mesh_.indices_.push_back((uint32_t)mesh_.vertices_.size());
+    mesh_.vertices_.push_back(vtx_out);
+}
 
 //================================================================
 // BuildFromScene
@@ -114,6 +226,7 @@ bool FbxMesh::BuildFromScene(const ufbx_scene* scene,
         return false;
     }
 
+    // 展開時に使ったフラット頂点は破棄（バインド／スキン頂点は残す）
     mesh_.vertices_.clear();
     mesh_.vertices_.shrink_to_fit();
 
@@ -137,14 +250,9 @@ void FbxMesh::ExpandAllNodes(const ufbx_scene* scene,
     mesh_.skinned_vertices_.clear();
 
     // バウンディングボックス初期化
-    XMFLOAT3 bb_min;
-    XMFLOAT3 bb_max;
-    bb_min.x = FLT_MAX;  bb_min.y = FLT_MAX;  bb_min.z = FLT_MAX;
-    bb_max.x = -FLT_MAX; bb_max.y = -FLT_MAX; bb_max.z = -FLT_MAX;
+    bounds_.Reset();
 
-    // ★ここを「今まで動いていた形」に合わせておく
-    // 以前 UfbxStaticModel_Mesh.cpp で使っていた:
-    //   skeleton_.Data().bone_index_of_
+    // Skeleton 内のボーンマップ
     const auto& bone_index_map = skeleton.Data().bone_index_of_;
 
     // シーン中の全ノードをチェック
@@ -153,82 +261,11 @@ void FbxMesh::ExpandAllNodes(const ufbx_scene* scene,
         const ufbx_mesh* mesh = node->mesh;
         if (!mesh) continue;
 
-        // 頂点ごとのスキン情報（BoneIndex + Weight）を格納
+        // 頂点ごとのスキン情報
         std::vector<VertexInfluence> infl_per_vtx;
+        BuildInfluencesForMesh(mesh, bone_index_map, infl_per_vtx);
 
-        if (mesh->skin_deformers.count > 0) {
-            infl_per_vtx.assign(
-                mesh->num_vertices,
-                VertexInfluence());
-
-            const ufbx_skin_deformer* skin =
-                mesh->skin_deformers.data[0];
-
-            const ufbx_skin_cluster_list& clusters = skin->clusters;
-            const ufbx_skin_vertex_list& vtx_list = skin->vertices;
-            const ufbx_skin_weight_list& w_list = skin->weights;
-
-            // 一旦「ボーン番号＋ウェイト」のリストをためてから 4 本に絞る
-            std::vector< std::vector< std::pair<uint16_t, float> > >
-                acc(mesh->num_vertices);
-
-            for (size_t v = 0; v < vtx_list.count; ++v) {
-                const ufbx_skin_vertex sv = vtx_list.data[v];
-                uint32_t begin = sv.weight_begin;
-                uint32_t n = sv.num_weights;
-
-                for (uint32_t k = 0; k < n; ++k) {
-                    const ufbx_skin_weight w = w_list.data[begin + k];
-                    uint32_t ci = w.cluster_index;
-                    if (ci >= clusters.count) continue;
-
-                    const ufbx_skin_cluster* cl =
-                        clusters.data[ci];
-                    if (!cl || !cl->bone_node) continue;
-
-                    // ★ Skeleton 内にあるボーンインデックスマップを参照
-                    auto it = bone_index_map.find(cl->bone_node);
-                    if (it == bone_index_map.end()) {
-                        continue;
-                    }
-
-                    acc[v].push_back(
-                        std::make_pair(it->second, (float)w.weight));
-                }
-            }
-
-            // 4 本までに絞って正規化
-            for (size_t v2 = 0; v2 < acc.size(); ++v2) {
-                std::vector< std::pair<uint16_t, float> >& list = acc[v2];
-                if (list.empty()) continue;
-
-                // ウェイトの大きい順にソート
-                std::sort(list.begin(), list.end(), CompareBoneWeightPair);
-
-                // 最大 4 本だけ使う
-                if (list.size() > 4) {
-                    list.resize(4);
-                }
-
-                float sum = 0.0f;
-                for (size_t i = 0; i < list.size(); ++i) {
-                    sum += list[i].second;
-                }
-                if (sum <= 0.0f) sum = 1.0f;
-
-                VertexInfluence vi;
-                size_t n_infl = list.size();
-                if (n_infl > 4) n_infl = 4;
-
-                for (size_t i = 0; i < n_infl; ++i) {
-                    vi.bone[i] = list[i].first;
-                    vi.weight[i] = list[i].second / sum; // 合計 ≒ 1 に正規化
-                }
-                infl_per_vtx[v2] = vi;
-            }
-        }
-
-        // 基本 UV セット（とりあえず 1 つ選ぶ）
+        // 基本 UV セット（とりあえず 1 つ）
         const ufbx_vertex_vec2* base_uv = nullptr;
         if (mesh->vertex_uv.exists) {
             base_uv = &mesh->vertex_uv;
@@ -239,9 +276,8 @@ void FbxMesh::ExpandAllNodes(const ufbx_scene* scene,
             base_uv = &mesh->uv_sets.data[0].vertex_uv;
         }
 
-        // フェイスを「マテリアルごと」にグループ分け
-        std::unordered_map<uint32_t, std::vector<uint32_t> > faces_by_mat;
-
+        // フェイスをマテリアルごとにグループ分け
+        std::unordered_map<uint32_t, std::vector<uint32_t>> faces_by_mat;
         for (uint32_t fi = 0; fi < (uint32_t)mesh->faces.count; ++fi) {
             uint32_t mi =
                 (mesh->face_material.count > 0) ?
@@ -250,10 +286,9 @@ void FbxMesh::ExpandAllNodes(const ufbx_scene* scene,
         }
 
         // 各マテリアルごとに MeshPart を作って頂点展開
-        auto it_mat = faces_by_mat.begin();
-        for (; it_mat != faces_by_mat.end(); ++it_mat) {
-            uint32_t                     mat_index = it_mat->first;
-            const std::vector<uint32_t>& face_list = it_mat->second;
+        for (auto& kv : faces_by_mat) {
+            uint32_t                     mat_index = kv.first;
+            const std::vector<uint32_t>& face_list = kv.second;
 
             MeshPart part;
             part.mat = nullptr;
@@ -267,107 +302,40 @@ void FbxMesh::ExpandAllNodes(const ufbx_scene* scene,
                 {
                     mat = node->materials.data[mat_index];
                 }
-                else if (mesh && mesh->materials.count > mat_index)
-                {
+                else if (mesh && mesh->materials.count > mat_index) {
                     mat = mesh->materials.data[mat_index];
                 }
                 part.mat = mat;
             }
 
             // UV セットをテクスチャに合わせて選び直す
-            const ufbx_texture* tex_for_uv = UfbxUtil::GetDiffuseTexture(part.mat);
-            const ufbx_vertex_vec2* uvv = base_uv;
-            if (tex_for_uv && tex_for_uv->uv_set.length > 0) {
-                const ufbx_vertex_vec2* alt =
-                    UfbxUtil::ResolveUVByName(mesh, tex_for_uv->uv_set);
-                if (alt && alt->exists) {
-                    uvv = alt;
-                }
-            }
+            const ufbx_vertex_vec2* uvv =
+                ChooseUVSet(mesh, part.mat, base_uv);
+
+            // このマテリアルで使うコンテキストを準備
+            BuildContext ctx;
+            ctx.mesh = mesh;
+            ctx.uvv = uvv;
+            ctx.infl_per_vtx = &infl_per_vtx;
 
             // 登録されたフェイスを全て三角形に分解して頂点生成
-            for (size_t face_idx = 0; face_idx < face_list.size(); ++face_idx) {
-                uint32_t      f_index = face_list[face_idx];
+            for (uint32_t f_index : face_list) {
                 const ufbx_face f = mesh->faces.data[f_index];
                 if (f.num_indices < 3) continue;
 
                 // n角形を「扇形分割」で三角形にする
                 for (uint32_t k = 0; k + 2 < f.num_indices; ++k) {
-                    uint32_t corners[3];
-                    corners[0] = f.index_begin + 0;
-                    corners[1] = f.index_begin + (k + 1);
-                    corners[2] = f.index_begin + (k + 2);
+                    uint32_t corners[3] = {
+                        f.index_begin + 0,
+                        f.index_begin + (k + 1),
+                        f.index_begin + (k + 2),
+                    };
 
                     for (int c = 0; c < 3; ++c) {
                         uint32_t corner = corners[c];
                         uint32_t vtx = mesh->vertex_indices.data[corner];
 
-                        // 位置
-                        uint32_t pi =
-                            UfbxUtil::ValueIndexOf(mesh->vertex_position, corner, vtx);
-                        ufbx_vec3 p =
-                            mesh->vertex_position.values.data[pi];
-                        XMFLOAT3 P;
-                        P.x = (float)p.x;
-                        P.y = (float)p.y;
-                        P.z = (float)p.z;
-
-                        // AABB（バウンディングボックス）更新
-                        if (P.x < bb_min.x) bb_min.x = P.x;
-                        if (P.y < bb_min.y) bb_min.y = P.y;
-                        if (P.z < bb_min.z) bb_min.z = P.z;
-                        if (P.x > bb_max.x) bb_max.x = P.x;
-                        if (P.y > bb_max.y) bb_max.y = P.y;
-                        if (P.z > bb_max.z) bb_max.z = P.z;
-
-                        // 法線
-                        XMFLOAT3 N;
-                        N.x = 0.0f; N.y = 1.0f; N.z = 0.0f;
-                        if (mesh->vertex_normal.exists) {
-                            uint32_t ni2 =
-                                UfbxUtil::ValueIndexOf(mesh->vertex_normal, corner, vtx);
-                            ufbx_vec3 n =
-                                mesh->vertex_normal.values.data[ni2];
-
-                            double len = std::sqrt(
-                                n.x * n.x + n.y * n.y + n.z * n.z);
-                            if (len > 0.0) {
-                                double inv = 1.0 / len;
-                                N.x = (float)(n.x * inv);
-                                N.y = (float)(n.y * inv);
-                                N.z = (float)(n.z * inv);
-                            }
-                        }
-
-                        // UV (V だけ反転: 1 - v)
-                        XMFLOAT2 T;
-                        T.x = 0.0f; T.y = 0.0f;
-                        if (uvv && uvv->exists) {
-                            uint32_t ti =
-                                UfbxUtil::ValueIndexOf(*uvv, corner, vtx);
-                            ufbx_vec2 t =
-                                uvv->values.data[ti];
-                            T.x = (float)t.x;
-                            T.y = (float)(1.0 - t.y);
-                        }
-
-                        // 頂点構造体を埋める
-                        VertexPNT2 vtx_out;
-                        vtx_out.pos = P;
-                        vtx_out.nrm = N;
-                        vtx_out.uv = T;
-
-                        // スキン情報（ボーンとウェイト）
-                        VertexInfluence vi;
-                        if (!infl_per_vtx.empty()) {
-                            vi = infl_per_vtx[vtx];
-                        }
-
-                        // 自前の配列に追加
-                        mesh_.influences_.push_back(vi);
-                        mesh_.indices_.push_back(
-                            (uint32_t)mesh_.vertices_.size());
-                        mesh_.vertices_.push_back(vtx_out);
+                        EmitCorner(ctx, corner, vtx);
                     }
                 }
             }
@@ -381,23 +349,11 @@ void FbxMesh::ExpandAllNodes(const ufbx_scene* scene,
         }
     }
 
-    // シーンの「おおよその半径」を求める（デバッグ用）
-    XMFLOAT3 ext;
-    ext.x = (bb_max.x - bb_min.x) * 0.5f;
-    ext.y = (bb_max.y - bb_min.y) * 0.5f;
-    ext.z = (bb_max.z - bb_min.z) * 0.5f;
-
-    float a = (float)std::fabs(ext.x);
-    float b = (float)std::fabs(ext.y);
-    float c = (float)std::fabs(ext.z);
-
-    float r = a;
-    if (b > r) r = b;
-    if (c > r) r = c;
-    if (r < 1e-3f) r = 1.0f;
+    // ★AABB から球を更新
+    bounds_.RecalcSphereFromAABB();
 
     // スケルトン側にシーン半径を書き込む（ボーン表示で使用）
-    skeleton.Data().scene_radius_ = r;
+    skeleton.Data().scene_radius_ = bounds_.radius;
 
     // バインドポーズ頂点・スキニング結果頂点を準備
     mesh_.bind_vertices_ = mesh_.vertices_;
@@ -462,7 +418,7 @@ bool FbxMesh::CreateGpuBuffers()
 //================================================================
 bool FbxMesh::CreateEffectsAndTextures(
     const char* fbx_path,
-    const ufbx_scene* scene)
+    const ufbx_scene* /*scene*/)
 {
     using namespace DirectX;
     namespace fs = std::filesystem;
@@ -563,6 +519,80 @@ bool FbxMesh::CreateEffectsAndTextures(
     return true;
 }
 
+// FbxMesh.cpp
+
+void FbxMesh::ApplySkinCPU(
+    const std::vector<DirectX::XMMATRIX>& skin_mats)
+{
+    using namespace DirectX;
+
+    // 参照のショートカット
+    const auto& influences = mesh_.influences_;
+    const auto& bind_vertices = mesh_.bind_vertices_;
+    auto& out_vertices = mesh_.skinned_vertices_;
+
+    size_t n = bind_vertices.size();
+
+    if (n == 0) {
+        return;
+    }
+
+    // サイズがズレていたら skinned を合わせておく
+    if (out_vertices.size() != n) {
+        out_vertices.resize(n);
+    }
+
+    // インフルエンスの数が足りない場合は安全側に寄せる
+    if (influences.size() < n) {
+        n = influences.size();
+    }
+
+    for (size_t v = 0; v < n; ++v) {
+        const VertexInfluence& inf = influences[v];
+
+        XMVECTOR P = XMVectorZero(); // 合成された位置
+        XMVECTOR N = XMVectorZero(); // 合成された法線
+        bool     any = false;          // 1つでも有効なボーンがあったか
+
+        for (int k = 0; k < 4; ++k) {
+            float    w = inf.weight[k];
+            uint16_t b = inf.bone[k];
+
+            if (w <= 0.0f)             continue; // ウェイト0は無視
+            if (b >= skin_mats.size()) continue; // 不正なボーン番号も無視
+
+            const XMMATRIX& B = skin_mats[b];
+            XMVECTOR W = XMVectorReplicate(w);   // w → {w,w,w,w}
+
+            // P += (B * pos) * w
+            P = XMVectorMultiplyAdd(
+                UfbxUtil::TransformPosition(bind_vertices[v].pos, B),
+                W, P);
+
+            // N += (B * nrm) * w
+            N = XMVectorMultiplyAdd(
+                UfbxUtil::TransformNormal(bind_vertices[v].nrm, B),
+                W, N);
+
+            any = true;
+        }
+
+        // どのボーンからも影響がなければ、元の頂点を使う
+        if (!any) {
+            out_vertices[v] = bind_vertices[v];
+            continue;
+        }
+
+        // 合成結果を構造体に書き戻す
+        VertexPNT2 sv = bind_vertices[v];
+        XMStoreFloat3(&sv.pos, P);
+        N = XMVector3Normalize(N);
+        XMStoreFloat3(&sv.nrm, N);
+        out_vertices[v] = sv;
+    }
+}
+
+
 //================================================================
 // メッシュ描画
 //================================================================
@@ -584,7 +614,7 @@ void FbxMesh::Draw(
     // CPU スキニング（ボーン情報とウェイトがある場合のみ）
     if (!mesh_.influences_.empty() && !mesh_.bind_vertices_.empty()) {
         auto& skin_mats = skeleton.SkinMatrices();
-       //skin_mats.resize(skeleton.Bones().size());
+        //skin_mats.resize(skeleton.Bones().size()); //いるのか要らねぇのかわからない
 
         for (size_t i = 0; i < skeleton.Bones().size(); ++i) {
             XMMATRIX W =
@@ -596,11 +626,7 @@ void FbxMesh::Draw(
         }
 
         // CPU でスキニングして頂点を更新
-        ApplySkinCPU(
-            skin_mats,
-            mesh_.influences_,
-            mesh_.bind_vertices_,
-            mesh_.skinned_vertices_);
+        ApplySkinCPU(skin_mats);
 
         // GPU の頂点バッファにスキニング結果を書き戻す
         ctx->UpdateSubresource(
@@ -668,3 +694,41 @@ void FbxMesh::Draw(
         prev_blend->Release();
     }
 }
+
+void FbxMesh::ApplyUniformScale(float s)
+{
+    if (s <= 0.0f) return;
+
+    // --------------------------------------------------------
+    // フラット頂点（GPUアップロード前の元データ）
+    // --------------------------------------------------------
+    for (auto& v : mesh_.vertices_) {
+        v.pos.x *= s;
+        v.pos.y *= s;
+        v.pos.z *= s;
+    }
+
+    // --------------------------------------------------------
+    // バインドポーズ頂点
+    // --------------------------------------------------------
+    for (auto& v : mesh_.bind_vertices_) {
+        v.pos.x *= s;
+        v.pos.y *= s;
+        v.pos.z *= s;
+    }
+
+    // --------------------------------------------------------
+    // スキニング後頂点（初期状態）
+    // --------------------------------------------------------
+    for (auto& v : mesh_.skinned_vertices_) {
+        v.pos.x *= s;
+        v.pos.y *= s;
+        v.pos.z *= s;
+    }
+
+    // --------------------------------------------------------
+    // バウンディングボリューム
+    // --------------------------------------------------------
+    bounds_.Scale(s);
+}
+

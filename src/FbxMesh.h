@@ -9,6 +9,7 @@
 #include <DirectXMath.h>
 #include <CommonStates.h>
 #include <Effects.h>
+#include "BoundingVolume.h"
 
 using namespace DirectX;
 
@@ -26,6 +27,8 @@ namespace DirectX
         class CommonStates;
     }
 }
+
+struct BuildContext;
 
 class FbxMesh
 {
@@ -83,9 +86,11 @@ public:
         std::vector<VertexPNT2>      skinned_vertices_; // スキニング後頂点
     };
 
+
 public:
     FbxMesh() = default;
 
+    const BVolume& GetBV() const { return bounds_; }
     // CPU メッシュ展開 + GPU バッファ + エフェクト/テクスチャ作成をまとめて行う
     bool BuildFromScene(const ufbx_scene* scene,
         FbxSkeleton& skeleton,
@@ -113,7 +118,17 @@ private:
     bool CreateEffectsAndTextures(const char* fbx_path,
         const ufbx_scene* scene);
 
+    void EmitCorner(
+        BuildContext& ctx,
+        uint32_t corner,
+        uint32_t vtx);
+
+    void ApplySkinCPU(
+        const std::vector<DirectX::XMMATRIX>& skin_mats);
+
+    void ApplyUniformScale(float s);
 private:
+    BVolume bounds_;
     MeshData mesh_;
 
     // 描画リソース (旧 draw_ 相当のメッシュ側だけ)
