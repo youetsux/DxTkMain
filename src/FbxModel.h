@@ -8,6 +8,7 @@
 #include "ufbx.h"
 #include "FbxSkeleton.h"
 #include "FbxMesh.h"
+#include "BoundingVolume.h"
 
 // ufbx を前方宣言（ヘッダに直接依存しないようにする）
 struct ufbx_scene;
@@ -72,6 +73,15 @@ public:
     FbxMesh& Mesh() { return mesh_; }
     const FbxMesh& Mesh()        const { return mesh_; }
 
+    // ★ BV アクセサ（Mesh にフォワード）
+    BVolume& GetBV() { return mesh_.GetBV(); }
+    const BVolume& GetBV() const { return mesh_.GetBV(); }
+
+    // ★ シーン半径アクセサ（Skeleton にフォワード）
+    float SceneRadius() const
+    {
+        return skeleton_.SceneRadius();
+    }
 private:
     // シーン読み込みの下請け
     bool LoadScene(const char* fbx_path);

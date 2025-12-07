@@ -91,6 +91,7 @@ public:
     FbxMesh() = default;
 
     const BVolume& GetBV() const { return bounds_; }
+    BVolume& GetBV() { return bounds_; }
     // CPU メッシュ展開 + GPU バッファ + エフェクト/テクスチャ作成をまとめて行う
     bool BuildFromScene(const ufbx_scene* scene,
         FbxSkeleton& skeleton,

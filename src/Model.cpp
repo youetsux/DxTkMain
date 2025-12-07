@@ -14,6 +14,17 @@ using namespace DirectX;
 //====================================
 namespace
 {
+    // アニメーション関連の状態をひとまとめにする
+    struct AnimState
+    {
+        int    startFrame = 0;
+        int    endFrame = 0;
+        float  speed = 0.0f;   // 倍速
+        float  currentFrame = 0.0f;   // 表示用の現在フレーム
+
+        int    stackIndex = -1;
+        double timeSec = 0.0;    // 内部用のアニメ時間（秒）
+    };
     // ハンドルごとの「インスタンス」データ
     struct ModelData
     {
@@ -22,14 +33,12 @@ namespace
 
         std::string fileName;              // 読み込んだファイルパス
 
-        int   startFrame = 0;
-        int   endFrame = 0;
-        float animSpeed = 0.0f;
-        float currentFrame = 0.0f;
 
-        int animStackIndex = -1;
-        double animTimeSec = 0.0;   // ★ 追加：内部用のアニメ時間（秒）
+        AnimState anim;          // ★ ここに集約
         bool inUse = false;
+
+        // ★ 追加：モデルごとの一括スケール（デフォルト 1.0 = そのまま）
+        float  uniformScale = 1.0f;
     };
 
     std::vector<ModelData> g_models;
@@ -154,10 +163,10 @@ namespace Model
         md.pFbx = pShared;
         md.pTransform = nullptr;
         md.fileName = fileName;
-        md.startFrame = 0;
-        md.endFrame = 0;
-        md.animSpeed = 0.0f;
-        md.currentFrame = 0.0f;
+        md.anim.startFrame = 0;
+        md.anim.endFrame = 0;
+        md.anim.speed = 0.0f;
+        md.anim.currentFrame = 0.0f;
         md.inUse = true;
 
         return h;
@@ -177,10 +186,10 @@ namespace Model
         // 1) 使うアニメを決める（AnimStack 指定があれば優先）
         const ufbx_anim* anim = nullptr;
         if (scene) {
-            if (md.animStackIndex >= 0 &&
-                (size_t)md.animStackIndex < scene->anim_stacks.count)
+            if (md.anim.stackIndex >= 0 &&
+                (size_t)md.anim.stackIndex < scene->anim_stacks.count)
             {
-                const ufbx_anim_stack* stack = scene->anim_stacks.data[md.animStackIndex];
+                const ufbx_anim_stack* stack = scene->anim_stacks.data[md.anim.stackIndex];
                 if (stack) {
                     anim = stack->anim;  // AnimStack に対応する ufbx_anim
                 }
@@ -193,39 +202,39 @@ namespace Model
         }
 
         bool hasAnimSetting =
-            (md.endFrame > md.startFrame) && (md.animSpeed != 0.0f);
+            (md.anim.endFrame > md.anim.startFrame) && (md.anim.speed != 0.0f);
 
         if (anim && hasAnimSetting)
         {
             // ★ここだけ「時間ベース」に変える
             const double dtSec = EngineTime::DeltaTime();      // 秒
             const double framesPerSec = ANIM_FPS;                // 60fps 基準
-            const double deltaFrames = dtSec * framesPerSec * double(md.animSpeed);
+            const double deltaFrames = dtSec * framesPerSec * double(md.anim.speed);
 
             // フレーム番号を時間に応じて増やす
-            md.currentFrame += static_cast<float>(deltaFrames);
+            md.anim.currentFrame += static_cast<float>(deltaFrames);
 
             // 範囲 [startFrame, endFrame] 内でループ
-            float rangeLen = float(md.endFrame - md.startFrame + 1);
+            float rangeLen = float(md.anim.endFrame - md.anim.startFrame + 1);
             if (rangeLen <= 0.0f) rangeLen = 1.0f;
 
-            while (md.currentFrame > md.endFrame)   md.currentFrame -= rangeLen;
-            while (md.currentFrame < md.startFrame) md.currentFrame += rangeLen;
+            while (md.anim.currentFrame > md.anim.endFrame)   md.anim.currentFrame -= rangeLen;
+            while (md.anim.currentFrame < md.anim.startFrame) md.anim.currentFrame += rangeLen;
 
             // ここから先の「frame → time 変換」は旧ロジックと同じ
             const double secondsPerFrame = 1.0 / ANIM_FPS;
             double tSec = anim->time_begin
-                + double(md.currentFrame) * secondsPerFrame;
+                + double(md.anim.currentFrame) * secondsPerFrame;
 
             md.pFbx->UpdateSkeletonAtTime(anim, tSec);
         }
         else if (anim)
         {
             // アニメはあるが SetAnimFrame されていない → 先頭フレームで固定
-            md.currentFrame = static_cast<float>(md.startFrame);
+            md.anim.currentFrame = static_cast<float>(md.anim.startFrame);
             const double secondsPerFrame = 1.0 / ANIM_FPS;
             double tSec = anim->time_begin
-                + double(md.currentFrame) * secondsPerFrame;
+                + double(md.anim.currentFrame) * secondsPerFrame;
             md.pFbx->UpdateSkeletonAtTime(anim, tSec);
         }
         else
@@ -322,17 +331,17 @@ namespace Model
             std::swap(startFrame, endFrame);
         }
 
-        md.startFrame = startFrame;
-        md.endFrame = endFrame;
-        md.animSpeed = animSpeed;
-        md.currentFrame = float(startFrame);
-        md.animTimeSec = 0.0;        // ★内部時間もリセット
+        md.anim.startFrame = startFrame;
+        md.anim.endFrame = endFrame;
+        md.anim.speed = animSpeed;
+        md.anim.currentFrame = float(startFrame);
+        md.anim.timeSec = 0.0;        // ★内部時間もリセット
     }
 
     int GetAnimFrame(int handle)
     {
         if (!IsValidHandle(handle)) return 0;
-        return static_cast<int>(g_models[handle].currentFrame);
+        return static_cast<int>(g_models[handle].anim.currentFrame);
     }
 
     XMFLOAT3 GetBonePosition(int handle, std::string boneName)
@@ -416,10 +425,10 @@ namespace Model
             return;
         }
 
-        md.animStackIndex = index;
+        md.anim.stackIndex = index;
 
         // 新しい AnimStack に切り替えたので、フレームを先頭に戻しておく
-        md.currentFrame = (float)md.startFrame;
+        md.anim.currentFrame = (float)md.anim.startFrame;
     }
     void SetAnimStack(int handle, const std::string& stackName)
     {
@@ -437,8 +446,8 @@ namespace Model
             if (stackName.size() == stack->name.length &&
                 std::memcmp(stackName.c_str(), stack->name.data, stack->name.length) == 0)
             {
-                md.animStackIndex = (int)i;
-                md.currentFrame = (float)md.startFrame;
+                md.anim.stackIndex = (int)i;
+                md.anim.currentFrame = (float)md.anim.startFrame;
                 return;
             }
         }
