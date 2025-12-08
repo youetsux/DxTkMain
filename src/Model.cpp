@@ -24,6 +24,9 @@ namespace
 
         int    stackIndex = -1;
         double timeSec = 0.0;    // 内部用のアニメ時間（秒）
+
+        bool   paused = false;  // ★ ポーズ中なら true
+        bool   loop = true;   // ★ 将来用：ループ再生するか
     };
     // ハンドルごとの「インスタンス」データ
     struct ModelData
@@ -163,10 +166,8 @@ namespace Model
         md.pFbx = pShared;
         md.pTransform = nullptr;
         md.fileName = fileName;
-        md.anim.startFrame = 0;
-        md.anim.endFrame = 0;
-        md.anim.speed = 0.0f;
-        md.anim.currentFrame = 0.0f;
+        md.anim = AnimState{};
+        md.uniformScale = 1.0f;
         md.inUse = true;
 
         return h;
@@ -174,12 +175,13 @@ namespace Model
 
     
 
-    void Model::Draw(int handle)
+    void Draw(int handle)
     {
         constexpr double ANIM_FPS = 60.0;
         if (!IsValidHandle(handle)) return;
 
         auto& md = g_models[handle];
+        if (!md.pFbx) return;
 
         const ufbx_scene* scene = md.pFbx ? md.pFbx->Scene() : nullptr;
 
@@ -206,20 +208,53 @@ namespace Model
 
         if (anim && hasAnimSetting)
         {
-            // ★ここだけ「時間ベース」に変える
-            const double dtSec = EngineTime::DeltaTime();      // 秒
-            const double framesPerSec = ANIM_FPS;                // 60fps 基準
-            const double deltaFrames = dtSec * framesPerSec * double(md.anim.speed);
+            if (!md.anim.paused){
+                // ★ここだけ「時間ベース」に変える
+                const double dtSec = EngineTime::DeltaTime();      // 秒
+                const double framesPerSec = ANIM_FPS;                // 60fps 基準
+                const double deltaFrames = dtSec * framesPerSec * double(md.anim.speed);
 
-            // フレーム番号を時間に応じて増やす
-            md.anim.currentFrame += static_cast<float>(deltaFrames);
+                // フレーム番号を時間に応じて増やす
+                md.anim.currentFrame += static_cast<float>(deltaFrames);
 
-            // 範囲 [startFrame, endFrame] 内でループ
-            float rangeLen = float(md.anim.endFrame - md.anim.startFrame + 1);
-            if (rangeLen <= 0.0f) rangeLen = 1.0f;
+                if (md.anim.loop) {
+                    // 範囲 [startFrame, endFrame] 内でループ
+                    float rangeLen = float(md.anim.endFrame - md.anim.startFrame + 1);
+                    if (rangeLen <= 0.0f) rangeLen = 1.0f;
 
-            while (md.anim.currentFrame > md.anim.endFrame)   md.anim.currentFrame -= rangeLen;
-            while (md.anim.currentFrame < md.anim.startFrame) md.anim.currentFrame += rangeLen;
+                    while (md.anim.currentFrame > md.anim.endFrame)   md.anim.currentFrame -= rangeLen;
+                    while (md.anim.currentFrame < md.anim.startFrame) md.anim.currentFrame += rangeLen;
+                }
+                else
+                {
+                    // 一回再生：終端で止める
+                    if (md.anim.speed >= 0.0f)
+                    {
+                        if (md.anim.currentFrame > md.anim.endFrame)
+                        {
+                            md.anim.currentFrame = static_cast<float>(md.anim.endFrame);
+                            md.anim.paused = true; // 自動ポーズ
+                        }
+                        if (md.anim.currentFrame < md.anim.startFrame)
+                        {
+                            md.anim.currentFrame = static_cast<float>(md.anim.startFrame);
+                        }
+                    }
+                    else
+                    {
+                        // 逆再生も一応ケアしておくならこうする
+                        if (md.anim.currentFrame < md.anim.startFrame)
+                        {
+                            md.anim.currentFrame = static_cast<float>(md.anim.startFrame);
+                            md.anim.paused = true;
+                        }
+                        if (md.anim.currentFrame > md.anim.endFrame)
+                        {
+                            md.anim.currentFrame = static_cast<float>(md.anim.endFrame);
+                        }
+                    }
+                }
+            }
 
             // ここから先の「frame → time 変換」は旧ロジックと同じ
             const double secondsPerFrame = 1.0 / ANIM_FPS;
@@ -430,6 +465,7 @@ namespace Model
         // 新しい AnimStack に切り替えたので、フレームを先頭に戻しておく
         md.anim.currentFrame = (float)md.anim.startFrame;
     }
+
     void SetAnimStack(int handle, const std::string& stackName)
     {
         if (!IsValidHandle(handle)) return;
@@ -453,6 +489,30 @@ namespace Model
         }
 
         // 見つからなかったら何もしない（デフォルト anim のまま）
+    }
+
+    void SetAnimPaused(int handle, bool paused)
+    {
+        if (!IsValidHandle(handle)) return;
+        g_models[handle].anim.paused = paused;
+    }
+
+    bool IsAnimPaused(int handle)
+    {
+        if (!IsValidHandle(handle)) return false;
+        return g_models[handle].anim.paused;
+    }
+
+    void SetAnimLoop(int handle, bool loop)
+    {
+        if (!IsValidHandle(handle)) return;
+        g_models[handle].anim.loop = loop;
+    }
+
+    bool IsAnimLoop(int handle)
+    {
+        if (!IsValidHandle(handle)) return true; // デフォルトはループ扱い
+        return g_models[handle].anim.loop;
     }
 
 }

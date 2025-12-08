@@ -35,4 +35,11 @@ namespace Model
     // AnimStack を名前で指定
     void SetAnimStack(int handle, const std::string& stackName);
 
+    // ★ 追加：アニメのポーズ制御
+    void SetAnimPaused(int handle, bool paused);
+    bool IsAnimPaused(int handle);
+
+    // ★ 追加：ループ設定
+    void SetAnimLoop(int handle, bool loop);
+    bool IsAnimLoop(int handle);
 }

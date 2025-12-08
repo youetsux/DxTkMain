@@ -92,14 +92,12 @@ void App::Initialize(HWND hwnd, unsigned w, unsigned h)
     // 他モデルが必要ならここでロード
     g_hEnemy = Model::Load(".\\Assets\\Enemy.fbx");
     Model::SetAnimFrame(g_hEnemy, 0, 100, 1.0f);
+    Model::SetAnimLoop(g_hEnemy, false);
 
     g_hTriAvatar = Model::Load(".\\Assets\\TriAvater.fbx");
     // TriAvatar は今回は静的でもよいなら SetAnimFrame は省略可
 
     m_ready = true;
-
-    // フレームタイマー初期化
-    EngineTime::Reset();
 }
 
 // ------------------------------------------------------------
@@ -120,16 +118,42 @@ void App::Update()
 {
     if (!m_ready) return;
 
+    // スペースキーでアニメのポーズをトグル
+    {
+        static bool prevSpaceDown = false;
+        SHORT state = GetAsyncKeyState(VK_SPACE);
+        bool  currSpaceDown = (state & 0x8000) != 0;
+
+        // 立ち上がり検出（前フレームは離していて、今フレーム押された）
+        if (currSpaceDown && !prevSpaceDown)
+        {
+            // ここでは例として hModel, hModel2, hModel3 をまとめてトグル
+            // 1体だけならそのハンドルだけでOK
+			for (int i = 0;i < MODEL_NUM;++i) {
+				int hModel = g_hSilly[i];
+				bool paused = Model::IsAnimPaused(hModel);
+				bool next = !paused;
+				Model::SetAnimPaused(hModel, next);
+			}
+			bool paused = Model::IsAnimPaused(g_hEnemy);
+			bool next = !paused;
+            Model::SetAnimPaused(g_hEnemy, next);
+            Model::SetAnimPaused(g_hTriAvatar, next);
+        }
+
+        prevSpaceDown = currSpaceDown;
+    }
+
     // EngineTime::Tick() は WinMain 側で呼んでいる前提
     Camera::Update();
 
     // 回転させたい場合はここで Transform をいじる
     // 例：全員を少しずつ Y 回転させる
-     const float rotSpeed = XMConvertToRadians(1.0f); // 10°/秒
-     float dt = (float)EngineTime::DeltaTime();
-     for (int i = 0; i < MODEL_NUM; ++i) {
-         g_sillyTransform[i].rotate_.y += rotSpeed * dt;
-     }
+     //const float rotSpeed = XMConvertToRadians(1.0f); // 10°/秒
+     //float dt = (float)EngineTime::DeltaTime();
+     //for (int i = 0; i < MODEL_NUM; ++i) {
+     //    g_sillyTransform[i].rotate_.y += rotSpeed * dt;
+     //}
 }
 
 // ------------------------------------------------------------
