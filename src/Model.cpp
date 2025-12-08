@@ -173,6 +173,42 @@ namespace Model
         return h;
     }
 
+
+    int Load(const std::string& fileName, float targetHeight)
+    {
+        // まずは通常版 Load で読み込む（共有キャッシュを利用）
+        int handle = Load(fileName);
+        if (handle < 0) {
+            return handle;
+        }
+        if (!IsValidHandle(handle)) {
+            return handle;
+        }
+
+        auto& md = g_models[handle];
+        if (!md.pFbx) {
+            // 異常ケース：とりあえずスケール 1.0 のまま
+            md.uniformScale = 1.0f;
+            return handle;
+        }
+
+        // FbxModel から「高さ（Y サイズ）」を取得
+        float srcHeight = md.pFbx->MeasureSize(SizeMeasureAxis::HeightY);
+
+        const float EPS = 1e-5f;
+        if (srcHeight < EPS || targetHeight <= 0.0f)
+        {
+            // 異常ケース：スケール 1.0 のまま
+            md.uniformScale = 1.0f;
+        }
+        else
+        {
+            // 高さが targetHeight になるように一括スケール
+            md.uniformScale = targetHeight / srcHeight;
+        }
+
+        return handle;
+    }
     
 
     void Draw(int handle)
@@ -284,6 +320,15 @@ namespace Model
         if (md.pTransform) {
             world = md.pTransform->GetWorldMatrix();
         }
+        // ★ モデルごとの正規化スケールを反映
+        if (md.uniformScale != 1.0f)
+        {
+            XMMATRIX s = XMMatrixScaling(md.uniformScale,
+                md.uniformScale,
+                md.uniformScale);
+            world = s * world;
+        }
+
 
         DirectX::XMMATRIX view = Camera::GetViewMatrix();
         DirectX::XMMATRIX proj = Camera::GetProjectionMatrix();
@@ -307,6 +352,16 @@ namespace Model
         {
             world = md.pTransform->GetWorldMatrix();
         }
+        // ★ モデル本体と同じ正規化スケールを反映
+        if (md.uniformScale != 1.0f)
+        {
+            XMMATRIX s = XMMatrixScaling(md.uniformScale,
+                md.uniformScale,
+                md.uniformScale);
+            world = s * world;
+        }
+
+
 
         // カメラからビュー・プロジェクションを取得
         XMMATRIX view = Camera::GetViewMatrix();

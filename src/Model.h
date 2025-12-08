@@ -10,6 +10,9 @@ namespace Model
 {
     void Initialize();
     int  Load(std::string fileName);
+    // ’Ç‰ÁFƒV[ƒ“”¼Œa‚ğ targetRadius ‚É³‹K‰»‚µ‚Ä“Ç‚İ‚Ş”Å
+    int  Load(const std::string& fileName, float targetHeight);
+
     void Draw(int handle);
     void DrawSkeleton(int handle);
     void Release(int handle);

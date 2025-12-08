@@ -33,6 +33,70 @@ void FbxModel::Reset()
     mesh_ = FbxMesh{};
 }
 
+float FbxModel::SceneRadius() const
+{
+    // まずスケルトンが持っているシーン半径を優先して返す
+    float r = skeleton_.SceneRadius();   // FbxSkeleton::SceneRadius()
+
+    if (r > 0.0f) {
+        return r;
+    }
+
+    // スケルトンに有効な値がない場合は、メッシュの BV から半径を取る
+    const BVolume& bv = mesh_.GetBV();
+    if (bv.radius > 0.0f) {
+        return bv.radius;
+    }
+
+    // どちらもダメならとりあえず 1.0 を返す（ゼロ除算防止用）
+    return 1.0f;
+}
+
+float FbxModel::SceneHeight() const
+{
+    return MeasureSize(SizeMeasureAxis::HeightY);
+}
+
+float FbxModel::MeasureSize(SizeMeasureAxis axis) const
+{
+    const BVolume& bv = mesh_.GetBV();
+
+    // メッシュが空なら保険
+    const auto& vertices = mesh_.Data().vertices_;
+    if (vertices.empty()) {
+        return 1.0f;
+    }
+
+    float lenX = bv.max.x - bv.min.x;
+    float lenY = bv.max.y - bv.min.y;
+    float lenZ = bv.max.z - bv.min.z;
+
+    auto safe = [](float v) {
+        return (v > 0.0f) ? v : 1.0f;
+        };
+
+    switch (axis)
+    {
+    case SizeMeasureAxis::HeightY:
+        return safe(lenY);
+    case SizeMeasureAxis::WidthX:
+        return safe(lenX);
+    case SizeMeasureAxis::DepthZ:
+        return safe(lenZ);
+    case SizeMeasureAxis::MaxExtent:
+    {
+        float m = lenX;
+        if (lenY > m) m = lenY;
+        if (lenZ > m) m = lenZ;
+        return safe(m);
+    }
+    case SizeMeasureAxis::Radius:
+    default:
+        // 互換用：従来の「シーン半径」をそのまま返す
+        return SceneRadius();
+    }
+}
+
 //============================================================
 // LoadScene（内部）
 //   - ufbx_load_file でシーンを読む

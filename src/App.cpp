@@ -52,9 +52,9 @@ void App::Initialize(HWND hwnd, unsigned w, unsigned h)
 
     // 4) カメラ初期化
     Camera::Initialize();
-    Camera::SetPerspective(XMConvertToRadians(40.0f), float(w) / float(h));
-    Camera::SetPosition(XMVectorSet(0, 150, -300, 0));
-    Camera::SetTarget(XMVectorSet(0, 0, 150, 0));
+    Camera::SetPerspective(XMConvertToRadians(45.0f), float(w) / float(h));
+    Camera::SetPosition(XMVectorSet(0, 0.9, -5, 0));
+    Camera::SetTarget(XMVectorSet(0, 0.9, 0, 0));
 
     // モデル管理初期化
     Model::Initialize();
@@ -62,7 +62,7 @@ void App::Initialize(HWND hwnd, unsigned w, unsigned h)
     // SillyDancing を MODEL_NUM 体ロード（中身は共有される）
     for (int i = 0; i < MODEL_NUM; ++i)
     {
-        g_hSilly[i] = Model::Load(".\\Assets\\SillyDancing.fbx");
+        g_hSilly[i] = Model::Load(".\\Assets\\SillyDancing.fbx", 0.01f);
         // 2つ目の AnimStack を使うならそのまま
         Model::SetAnimStack(g_hSilly[i], 1);
         // 0〜229 フレームを 1.0 倍速でループ
@@ -72,9 +72,9 @@ void App::Initialize(HWND hwnd, unsigned w, unsigned h)
     // 横一列に並べる Transform を設定
     {
         // 中央基準に左右へ等間隔に並べる
-        const float spacing = 20.0f;      // モデル間の間隔
-        const float baseZ = 20.0f;      // 手前/奥の位置
-        const float scale = 0.5f;
+        const float spacing = 0.5f;      // モデル間の間隔
+        const float baseZ = 3.0f;      // 手前/奥の位置
+        const float scale = 1.0f;
 
         const float centerIndex = (MODEL_NUM - 1) * 0.5f;
 
@@ -90,11 +90,12 @@ void App::Initialize(HWND hwnd, unsigned w, unsigned h)
     }
 
     // 他モデルが必要ならここでロード
-    g_hEnemy = Model::Load(".\\Assets\\Enemy.fbx");
+    g_hEnemy = Model::Load(".\\Assets\\Enemy.fbx", 0.5);
     Model::SetAnimFrame(g_hEnemy, 0, 100, 1.0f);
     Model::SetAnimLoop(g_hEnemy, false);
+    
 
-    g_hTriAvatar = Model::Load(".\\Assets\\TriAvater.fbx");
+    g_hTriAvatar = Model::Load(".\\Assets\\TriAvater.fbx", 0.1f);
     // TriAvatar は今回は静的でもよいなら SetAnimFrame は省略可
 
     m_ready = true;
@@ -187,15 +188,15 @@ void App::Render()
     // （位置は適当に）
     {
         static Transform tEnemy;
-        tEnemy.position_ = { 0.0f, 0.0f, -100.0f };
-        tEnemy.scale_ = { 10.0f, 10.0f, 10.0f };
+        tEnemy.position_ = { 0.0f, 0.0f, -1.0f };
+        tEnemy.scale_ = { 1.0f, 1.0f, 1.0f };
         tEnemy.Calclation();
 
         Model::SetTransform(g_hEnemy, tEnemy);
         Model::Draw(g_hEnemy);
 
         static Transform tri;
-        tri.position_ = { 5.0f, 0.0f, 50.0f };
+        tri.position_ = { 3.0f, 0.0f, 1.0f };
         tri.scale_ = { 1.0f, 1.0f, 1.0f };
         tri.rotate_.y += 1;
         tri.Calclation();

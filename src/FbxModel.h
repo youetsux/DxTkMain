@@ -10,6 +10,17 @@
 #include "FbxMesh.h"
 #include "BoundingVolume.h"
 
+
+enum class SizeMeasureAxis
+{
+    HeightY,      // max.y - min.y
+    WidthX,       // max.x - min.x
+    DepthZ,       // max.z - min.z
+    MaxExtent,    // max(x,y,z)
+    Radius,       // 従来互換（必要なら）
+};
+
+
 // ufbx を前方宣言（ヘッダに直接依存しないようにする）
 struct ufbx_scene;
 struct ufbx_anim;
@@ -78,10 +89,9 @@ public:
     const BVolume& GetBV() const { return mesh_.GetBV(); }
 
     // ★ シーン半径アクセサ（Skeleton にフォワード）
-    float SceneRadius() const
-    {
-        return skeleton_.SceneRadius();
-    }
+    float SceneRadius() const;
+    float SceneHeight() const;   // ★ 追加：Y 高さ（maxY - minY）
+    float MeasureSize(SizeMeasureAxis axis) const;
 private:
     // シーン読み込みの下請け
     bool LoadScene(const char* fbx_path);
@@ -95,5 +105,7 @@ private:
 
     // メッシュ＋テクスチャ＋描画情報
     FbxMesh     mesh_;
+
+
 };
 
