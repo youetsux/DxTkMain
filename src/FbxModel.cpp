@@ -61,12 +61,6 @@ float FbxModel::MeasureSize(SizeMeasureAxis axis) const
 {
     const BVolume& bv = mesh_.GetBV();
 
-    // ƒƒbƒVƒ…‚ª‹ó‚È‚ç•ÛŒ¯
-    const auto& vertices = mesh_.Data().vertices_;
-    if (vertices.empty()) {
-        return 1.0f;
-    }
-
     float lenX = bv.max.x - bv.min.x;
     float lenY = bv.max.y - bv.min.y;
     float lenZ = bv.max.z - bv.min.z;

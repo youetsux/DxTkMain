@@ -12,6 +12,8 @@
 
 #include <vector>
 
+#include <GeometricPrimitive.h>
+
 using namespace DirectX;
 
 // ------------------------------------------------------------
@@ -20,7 +22,7 @@ using namespace DirectX;
 namespace
 {
     // 並べるモデル数（必要に応じて変えてください）
-    constexpr int MODEL_NUM = 5;
+    constexpr int MODEL_NUM = 1;
 
     // SillyDancing 用のモデルハンドル配列
     int g_hSilly[MODEL_NUM];
@@ -31,7 +33,17 @@ namespace
     // 他のモデル（必要なら残す）
     int g_hEnemy = -1;
     int g_hTriAvatar = -1;
+
+    std::unique_ptr<DirectX::GeometricPrimitive> g_unitCube;
+
+    void InitDebugPrimitives()
+    {
+        auto device = Gfx::Ctx();
+        g_unitCube = DirectX::GeometricPrimitive::CreateCube(device);
+    }
 }
+
+
 
 // ------------------------------------------------------------
 // 初期化
@@ -62,7 +74,7 @@ void App::Initialize(HWND hwnd, unsigned w, unsigned h)
     // SillyDancing を MODEL_NUM 体ロード（中身は共有される）
     for (int i = 0; i < MODEL_NUM; ++i)
     {
-        g_hSilly[i] = Model::Load(".\\Assets\\SillyDancing.fbx", 0.01f);
+        g_hSilly[i] = Model::Load(".\\Assets\\SillyDancing.fbx", 1.0f);
         // 2つ目の AnimStack を使うならそのまま
         Model::SetAnimStack(g_hSilly[i], 1);
         // 0〜229 フレームを 1.0 倍速でループ
@@ -90,12 +102,12 @@ void App::Initialize(HWND hwnd, unsigned w, unsigned h)
     }
 
     // 他モデルが必要ならここでロード
-    g_hEnemy = Model::Load(".\\Assets\\Enemy.fbx", 0.5);
+    g_hEnemy = Model::Load(".\\Assets\\Enemy.fbx", 1.0);
     Model::SetAnimFrame(g_hEnemy, 0, 100, 1.0f);
     Model::SetAnimLoop(g_hEnemy, false);
     
 
-    g_hTriAvatar = Model::Load(".\\Assets\\TriAvater.fbx", 0.1f);
+    g_hTriAvatar = Model::Load(".\\Assets\\TriAvater.fbx", 1.0f);
     // TriAvatar は今回は静的でもよいなら SetAnimFrame は省略可
 
     m_ready = true;
@@ -196,9 +208,9 @@ void App::Render()
         Model::Draw(g_hEnemy);
 
         static Transform tri;
-        tri.position_ = { 3.0f, 0.0f, 1.0f };
+        tri.position_ = { 0.0f, 0.0f, 0.0f };
         tri.scale_ = { 1.0f, 1.0f, 1.0f };
-        tri.rotate_.y += 1;
+        //tri.rotate_.y += 1;
         tri.Calclation();
 
        
