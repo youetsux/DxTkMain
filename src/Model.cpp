@@ -194,7 +194,7 @@ namespace Model
 
         // FbxModel から「高さ（Y サイズ）」を取得
         //float srcHeight = md.pFbx->MeasureSize(SizeMeasureAxis::HeightY);
-        float srcHeight = md.pFbx->MeasureSkinnedHeightYAtDefaultPose();
+        float srcHeight = md.pFbx->MeasureSkinnedHeightY();
         if (fileName.find("TriAvater") != std::string::npos) {
             OutputDebugStringA(
                 (std::string("TriAvater: srcHeight = ")

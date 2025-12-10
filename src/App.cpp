@@ -33,6 +33,7 @@ namespace
     // 他のモデル（必要なら残す）
     int g_hEnemy = -1;
     int g_hTriAvatar = -1;
+	int h_gOtherModel = -1;
 
     std::unique_ptr<DirectX::GeometricPrimitive> g_unitCube;
 
@@ -119,7 +120,11 @@ void App::Initialize(HWND hwnd, unsigned w, unsigned h)
     Model::SetAnimLoop(g_hEnemy, false);
     
 
-    g_hTriAvatar = Model::Load(".\\Assets\\TriAvater.fbx", 1.0f);
+    h_gOtherModel = Model::Load(".\\Assets\\GS_MotionSet.fbx", 2.0);
+    Model::SetAnimFrame(h_gOtherModel, 0, 2475, 1.0f);
+    Model::SetAnimLoop(h_gOtherModel, true);
+
+    g_hTriAvatar = Model::Load(".\\Assets\\TriAvater.fbx", 1.5f);
    //g_hTriAvatar = Model::Load(".\\Assets\\tri2.fbx", 1.0f);
     // TriAvatar は今回は静的でもよいなら SetAnimFrame は省略可
 
@@ -206,23 +211,24 @@ void App::Render()
     //    //g_sillyTransform[i].Calclation();
 
     //   // Model::SetTransform(g_hSilly[i], g_sillyTransform[i]);
-    //    Transform temp;
-    //    Model::SetTransform(g_hSilly[i], temp);
-    //    Model::Draw(g_hSilly[i]);
+       Transform temp;
+       temp.position_.x = 1.0f;
+        Model::SetTransform(g_hSilly[0], temp);
+        Model::Draw(g_hSilly[0]);
     //    // スケルトンを重ねて描きたい場合は:
-    //    // Model::DrawSkeleton(g_hSilly[i]);
+        // Model::DrawSkeleton(g_hSilly[i]);
     //}
 
     // ついでに他モデルも描画したければここで
     // （位置は適当に）
     {
-        //static Transform tEnemy;
-        //tEnemy.position_ = { 0.0f, 0.0f, -1.0f };
-        //tEnemy.scale_ = { 1.0f, 1.0f, 1.0f };
-        //tEnemy.Calclation();
+        static Transform tEnemy;
+        tEnemy.position_ = { 2.0f, 0.0f, 0.0f };
+        tEnemy.scale_ = { 1.0f, 1.0f, 1.0f };
+        tEnemy.Calclation();
 
-        //Model::SetTransform(g_hEnemy, tEnemy);
-        //Model::Draw(g_hEnemy);
+        Model::SetTransform(g_hEnemy, tEnemy);
+        Model::Draw(g_hEnemy);
 
         static Transform tri;
         tri.position_ = { 0.0f, 0.0f, 0.0f };
@@ -232,6 +238,16 @@ void App::Render()
         tri.Calclation();  
         Model::SetTransform(g_hTriAvatar, tri);
         Model::Draw(g_hTriAvatar);
+
+        static Transform ken;
+        ken.position_ = { -2.0f, 0.0f, 0.0f };
+        ken.scale_ = { 1.0f, 1.0f, 1.0f };
+        ken.rotate_ = { 0.0f, 0.0f, 0.0f };
+		ken.Calclation();
+        Model::SetTransform(h_gOtherModel, ken);
+		Model::Draw(h_gOtherModel);
+
+
 
     }
 

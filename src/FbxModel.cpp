@@ -201,39 +201,56 @@ float FbxModel::MeasureSize(SizeMeasureAxis axis)
     }
 }
 
-float FbxModel::MeasureSkinnedHeightYAtDefaultPose()
+float FbxModel::MeasureSkinnedHeightY()
 {
-    // 1) どのポーズで測るか決める（とりあえず「デフォルトアニメの先頭」）
+    const ufbx_scene* scene = scene_.get();
     const ufbx_anim* anim = GetDefaultAnim();
-    double tSec = anim ? anim->time_begin : 0.0;
 
-    // 2) その時間にスケルトンを更新
-    UpdateSkeletonAtTime(anim, tSec);   // もしくは anim==nullptr なら UpdateSkeletonAtTime(tSec)
-
-    // 3) CPU スキニング実行
-    mesh_.ApplySkinCPU(skeleton_.SkinMatrices());
-
-    // 4) skinned_vertices_ から AABB を取って HeightY を返す
-    const auto& skinned = mesh_.Data().skinned_vertices_;
-    if (skinned.empty()) return 1.0f;
-
-    XMFLOAT3 bbMin{ FLT_MAX,  FLT_MAX,  FLT_MAX };
-    XMFLOAT3 bbMax{ -FLT_MAX, -FLT_MAX, -FLT_MAX };
-
-    for (const auto& v : skinned) {
-        bbMin.x = std::min(bbMin.x, v.pos.x);
-        bbMin.y = std::min(bbMin.y, v.pos.y);
-        bbMin.z = std::min(bbMin.z, v.pos.z);
-
-        bbMax.x = std::max(bbMax.x, v.pos.x);
-        bbMax.y = std::max(bbMax.y, v.pos.y);
-        bbMax.z = std::max(bbMax.z, v.pos.z);
+    // アニメが無い or シーンが無い場合 → メッシュ高さで代用
+    if (!scene || !anim) {
+        return MeasureSize(SizeMeasureAxis::HeightY);
     }
 
-    float heightY = bbMax.y - bbMin.y;
-    if (heightY <= 0.0f) heightY = 1.0f; // 保険
+    // 1) デフォルトポーズにスケルトンを合わせる
+    double t0 = anim->time_begin;
+    UpdateSkeletonAtTime(anim, t0); // ★ ここで curr_world_ が更新される
 
-    return heightY;
+    // 2) Draw() と同じ手順で skin_mats を作って CPU スキニング実行
+    const auto& bones = skeleton_.Bones();
+    const auto& curr = skeleton_.CurrWorld();
+
+    std::vector<DirectX::XMMATRIX> skin_mats;
+    skin_mats.resize(bones.size());
+
+    for (size_t i = 0; i < bones.size(); ++i) {
+        DirectX::XMMATRIX bind = DirectX::XMLoadFloat4x4(&bones[i].geom_bind_world);
+        DirectX::XMMATRIX cw = DirectX::XMLoadFloat4x4(&curr[i]);
+        skin_mats[i] = bind * cw;
+    }
+
+    // ★ここで skinned_vertices_ が埋まる
+    mesh_.ApplySkinCPU(skin_mats);
+
+    // 3) skinned_vertices_ から Y の min/max を取る
+    const auto& sv = mesh_.Data().skinned_vertices_;
+    if (sv.empty()) {
+        // 念のための保険
+        return MeasureSize(SizeMeasureAxis::HeightY);
+    }
+
+    float minY = FLT_MAX;
+    float maxY = -FLT_MAX;
+    for (const auto& v : sv) {
+        if (v.pos.y < minY) minY = v.pos.y;
+        if (v.pos.y > maxY) maxY = v.pos.y;
+    }
+
+    if (minY > maxY) {
+        // ここにはもう基本落ちてこない想定だけど一応
+        return MeasureSize(SizeMeasureAxis::HeightY);
+    }
+
+    return maxY - minY;
 }
 
 //============================================================
@@ -290,7 +307,7 @@ bool FbxModel::Load(const char* fbx_path)
     if (!mesh_.BuildFromScene(scene, skeleton_, fbx_path)) {
         return false;
     }
-
+    UpdateSkeletonAtTime(0.0);
     return true;
 }
 

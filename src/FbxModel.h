@@ -92,7 +92,8 @@ public:
     float SceneRadius();
     float SceneHeight();   // ★ 追加：Y 高さ（maxY - minY）
     float MeasureSize(SizeMeasureAxis axis);
-    float MeasureSkinnedHeightYAtDefaultPose();
+    float MeasureSkinnedHeightY();
+
 private:
     // シーン読み込みの下請け
     bool LoadScene(const char* fbx_path);
