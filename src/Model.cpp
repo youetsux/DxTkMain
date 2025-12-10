@@ -193,7 +193,8 @@ namespace Model
         }
 
         // FbxModel から「高さ（Y サイズ）」を取得
-        float srcHeight = md.pFbx->MeasureSize(SizeMeasureAxis::HeightY);
+        //float srcHeight = md.pFbx->MeasureSize(SizeMeasureAxis::HeightY);
+        float srcHeight = md.pFbx->MeasureSkinnedHeightYAtDefaultPose();
         if (fileName.find("TriAvater") != std::string::npos) {
             OutputDebugStringA(
                 (std::string("TriAvater: srcHeight = ")
@@ -216,15 +217,15 @@ namespace Model
         }
 
         // ★ ここを一時的に入れて、TriAvatar の実際の値を確認する
-        if (fileName.find("TriAvater") != std::string::npos) {
-            float worldHeight = srcHeight * md.uniformScale;  // Transform の scale が 1 前提
+        //if (fileName.find("TriAvater") != std::string::npos) {
+        //    float worldHeight = srcHeight * md.uniformScale;  // Transform の scale が 1 前提
 
-            char buf[256];
-            sprintf_s(buf,
-                "TriAvater: srcHeight = %.3f, targetHeight = %.3f, uniformScale = %.6f, worldHeight = %.3f\n",
-                srcHeight, targetHeight, md.uniformScale, worldHeight);
-            OutputDebugStringA(buf);
-        }
+        //    char buf[256];
+        //    sprintf_s(buf,
+        //        "TriAvater: srcHeight = %.3f, targetHeight = %.3f, uniformScale = %.6f, worldHeight = %.3f\n",
+        //        srcHeight, targetHeight, md.uniformScale, worldHeight);
+        //    OutputDebugStringA(buf);
+        //}
 
 
         return handle;
@@ -238,6 +239,17 @@ namespace Model
 
         auto& md = g_models[handle];
         if (!md.pFbx) return;
+
+        // ★ デバッグログ追加
+ /*       {
+            char buf[256];
+            sprintf_s(buf,
+                "[Draw] h=%d  uniformScale=%.6f  HeightY=%.6f\n",
+                handle,
+                md.uniformScale,
+                md.pFbx->MeasureSize(SizeMeasureAxis::HeightY));
+            OutputDebugStringA(buf);
+        }*/
 
         const ufbx_scene* scene = md.pFbx ? md.pFbx->Scene() : nullptr;
 

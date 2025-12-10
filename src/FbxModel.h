@@ -89,9 +89,10 @@ public:
     const BVolume& GetBV() const { return mesh_.GetBV(); }
 
     // ★ シーン半径アクセサ（Skeleton にフォワード）
-    float SceneRadius() const;
-    float SceneHeight() const;   // ★ 追加：Y 高さ（maxY - minY）
-    float MeasureSize(SizeMeasureAxis axis) const;
+    float SceneRadius();
+    float SceneHeight();   // ★ 追加：Y 高さ（maxY - minY）
+    float MeasureSize(SizeMeasureAxis axis);
+    float MeasureSkinnedHeightYAtDefaultPose();
 private:
     // シーン読み込みの下請け
     bool LoadScene(const char* fbx_path);

@@ -41,6 +41,18 @@ namespace
         auto device = Gfx::Ctx();
         g_unitCube = DirectX::GeometricPrimitive::CreateCube(device);
     }
+    void DrawUnitHeightBox()
+    {
+        using namespace DirectX;
+
+        XMMATRIX world =
+            XMMatrixTranslation(-1.0f, 0.5f, 0.0f); // 高さ1、足元0
+
+        auto view = Camera::GetViewMatrix();
+        auto proj = Camera::GetProjectionMatrix();
+
+        g_unitCube->Draw(world, view, proj, Colors::Red);
+    }
 }
 
 
@@ -108,8 +120,10 @@ void App::Initialize(HWND hwnd, unsigned w, unsigned h)
     
 
     g_hTriAvatar = Model::Load(".\\Assets\\TriAvater.fbx", 1.0f);
+   //g_hTriAvatar = Model::Load(".\\Assets\\tri2.fbx", 1.0f);
     // TriAvatar は今回は静的でもよいなら SetAnimFrame は省略可
 
+    InitDebugPrimitives();
     m_ready = true;
 }
 
@@ -182,42 +196,47 @@ void App::Render()
     // ここで V/P を使わなくてもよい）
     XMMATRIX V = Camera::GetViewMatrix();
     XMMATRIX P = Camera::GetProjectionMatrix();
-    (void)V; (void)P;
+
 
     // SillyDancing を横一列に描画
-    for (int i = 0; i < MODEL_NUM; ++i)
-    {
-        // 毎フレームワールド行列を更新
-        g_sillyTransform[i].Calclation();
+    
+    //for (int i = 0; i < MODEL_NUM; ++i)
+    //{
+    //    // 毎フレームワールド行列を更新
+    //    //g_sillyTransform[i].Calclation();
 
-        Model::SetTransform(g_hSilly[i], g_sillyTransform[i]);
-        Model::Draw(g_hSilly[i]);
-        // スケルトンを重ねて描きたい場合は:
-        // Model::DrawSkeleton(g_hSilly[i]);
-    }
+    //   // Model::SetTransform(g_hSilly[i], g_sillyTransform[i]);
+    //    Transform temp;
+    //    Model::SetTransform(g_hSilly[i], temp);
+    //    Model::Draw(g_hSilly[i]);
+    //    // スケルトンを重ねて描きたい場合は:
+    //    // Model::DrawSkeleton(g_hSilly[i]);
+    //}
 
     // ついでに他モデルも描画したければここで
     // （位置は適当に）
     {
-        static Transform tEnemy;
-        tEnemy.position_ = { 0.0f, 0.0f, -1.0f };
-        tEnemy.scale_ = { 1.0f, 1.0f, 1.0f };
-        tEnemy.Calclation();
+        //static Transform tEnemy;
+        //tEnemy.position_ = { 0.0f, 0.0f, -1.0f };
+        //tEnemy.scale_ = { 1.0f, 1.0f, 1.0f };
+        //tEnemy.Calclation();
 
-        Model::SetTransform(g_hEnemy, tEnemy);
-        Model::Draw(g_hEnemy);
+        //Model::SetTransform(g_hEnemy, tEnemy);
+        //Model::Draw(g_hEnemy);
 
         static Transform tri;
         tri.position_ = { 0.0f, 0.0f, 0.0f };
         tri.scale_ = { 1.0f, 1.0f, 1.0f };
+		tri.rotate_ = { 0.0f, 0.0f, 0.0f };
         //tri.rotate_.y += 1;
-        tri.Calclation();
-
-       
+        tri.Calclation();  
         Model::SetTransform(g_hTriAvatar, tri);
         Model::Draw(g_hTriAvatar);
 
     }
+
+    // 単位ボックス
+    DrawUnitHeightBox();
 
     m_renderer.EndFrame();
     m_renderer.Present();

@@ -632,6 +632,27 @@ void FbxMesh::Draw(
         ctx->UpdateSubresource(
             vb_.Get(), 0, nullptr,
             &mesh_.skinned_vertices_[0], 0, 0);
+
+        // CPU スキニングが終わった直後あたりに追加（デバッグ用）
+        {
+            float minY = FLT_MAX;
+            float maxY = -FLT_MAX;
+
+            for (const auto& v : mesh_.skinned_vertices_) {
+                if (v.pos.y < minY) minY = v.pos.y;
+                if (v.pos.y > maxY) maxY = v.pos.y;
+            }
+
+            float skinnedHeight = (maxY - minY);
+
+            char buf[256];
+            std::snprintf(
+                buf, sizeof(buf),
+                "[SkinnedAABB] skinnedHeight=%.6f\n",
+                skinnedHeight
+            );
+            OutputDebugStringA(buf);
+        }
     }
 
     // IA ステージ設定

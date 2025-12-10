@@ -106,7 +106,8 @@ public:
     // アクセサ
     const MeshData& Data() const { return mesh_; }
     MeshData& Data() { return mesh_; }
-
+    void ApplySkinCPU(
+        const std::vector<DirectX::XMMATRIX>& skin_mats);
 private:
     // 旧 ExpandAllNodes
     void ExpandAllNodes(const ufbx_scene* scene,
@@ -124,8 +125,7 @@ private:
         uint32_t corner,
         uint32_t vtx);
 
-    void ApplySkinCPU(
-        const std::vector<DirectX::XMMATRIX>& skin_mats);
+
 
     void ApplyUniformScale(float s);
 private:
