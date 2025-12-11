@@ -132,6 +132,8 @@ private:
     BVolume bounds_;
     MeshData mesh_;
 
+	bool has_skinning_ = false;
+
     // 描画リソース (旧 draw_ 相当のメッシュ側だけ)
     Microsoft::WRL::ComPtr<ID3D11Buffer>          vb_;
     Microsoft::WRL::ComPtr<ID3D11Buffer>          ib_;

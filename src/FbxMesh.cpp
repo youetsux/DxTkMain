@@ -255,11 +255,17 @@ void FbxMesh::ExpandAllNodes(const ufbx_scene* scene,
     // Skeleton 内のボーンマップ
     const auto& bone_index_map = skeleton.Data().bone_index_of_;
 
+
+    has_skinning_ = false;
     // シーン中の全ノードをチェック
     for (size_t ni = 0; ni < scene->nodes.count; ++ni) {
         const ufbx_node* node = scene->nodes.data[ni];
         const ufbx_mesh* mesh = node->mesh;
         if (!mesh) continue;
+
+        if (mesh->skin_deformers.count > 0) {
+            has_skinning_ = true;   // ★ ここで設定（最初の1回でOK）
+        }
 
         // 頂点ごとのスキン情報
         std::vector<VertexInfluence> infl_per_vtx;
@@ -610,48 +616,49 @@ void FbxMesh::Draw(
     if (!vb_ || !ib_)             return;
     if (!fx_ || !states_ || !layout_) return;
     if (mesh_.indices_.empty())   return;
+    if (has_skinning_) {
+        // CPU スキニング（ボーン情報とウェイトがある場合のみ）
+        if (!mesh_.influences_.empty() && !mesh_.bind_vertices_.empty()) {
+            auto& skin_mats = skeleton.SkinMatrices();
+            //skin_mats.resize(skeleton.Bones().size()); //いるのか要らねぇのかわからない
 
-    // CPU スキニング（ボーン情報とウェイトがある場合のみ）
-    if (!mesh_.influences_.empty() && !mesh_.bind_vertices_.empty()) {
-        auto& skin_mats = skeleton.SkinMatrices();
-        //skin_mats.resize(skeleton.Bones().size()); //いるのか要らねぇのかわからない
-
-        for (size_t i = 0; i < skeleton.Bones().size(); ++i) {
-            XMMATRIX W =
-                XMLoadFloat4x4(&skeleton.CurrWorld()[i]);
-            XMMATRIX G2B =
-                XMLoadFloat4x4(&skeleton.Bones()[i].geom_bind_world);
-            // スキン行列 = 現在ボーン姿勢 × ジオメトリ→ボーン
-            skin_mats[i] = XMMatrixMultiply(G2B, W);
-        }
-
-        // CPU でスキニングして頂点を更新
-        ApplySkinCPU(skin_mats);
-
-        // GPU の頂点バッファにスキニング結果を書き戻す
-        ctx->UpdateSubresource(
-            vb_.Get(), 0, nullptr,
-            &mesh_.skinned_vertices_[0], 0, 0);
-
-        // CPU スキニングが終わった直後あたりに追加（デバッグ用）
-        {
-            float minY = FLT_MAX;
-            float maxY = -FLT_MAX;
-
-            for (const auto& v : mesh_.skinned_vertices_) {
-                if (v.pos.y < minY) minY = v.pos.y;
-                if (v.pos.y > maxY) maxY = v.pos.y;
+            for (size_t i = 0; i < skeleton.Bones().size(); ++i) {
+                XMMATRIX W =
+                    XMLoadFloat4x4(&skeleton.CurrWorld()[i]);
+                XMMATRIX G2B =
+                    XMLoadFloat4x4(&skeleton.Bones()[i].geom_bind_world);
+                // スキン行列 = 現在ボーン姿勢 × ジオメトリ→ボーン
+                skin_mats[i] = XMMatrixMultiply(G2B, W);
             }
 
-            float skinnedHeight = (maxY - minY);
+            // CPU でスキニングして頂点を更新
+            ApplySkinCPU(skin_mats);
 
-            char buf[256];
-            std::snprintf(
-                buf, sizeof(buf),
-                "[SkinnedAABB] skinnedHeight=%.6f\n",
-                skinnedHeight
-            );
-            OutputDebugStringA(buf);
+            // GPU の頂点バッファにスキニング結果を書き戻す
+            ctx->UpdateSubresource(
+                vb_.Get(), 0, nullptr,
+                &mesh_.skinned_vertices_[0], 0, 0);
+
+            // CPU スキニングが終わった直後あたりに追加（デバッグ用）
+            {
+                float minY = FLT_MAX;
+                float maxY = -FLT_MAX;
+
+                for (const auto& v : mesh_.skinned_vertices_) {
+                    if (v.pos.y < minY) minY = v.pos.y;
+                    if (v.pos.y > maxY) maxY = v.pos.y;
+                }
+
+                float skinnedHeight = (maxY - minY);
+
+                //char buf[256];
+                //std::snprintf(
+                //    buf, sizeof(buf),
+                //    "[SkinnedAABB] skinnedHeight=%.6f\n",
+                //    skinnedHeight
+                //);
+                //OutputDebugStringA(buf);
+            }
         }
     }
 

@@ -97,7 +97,7 @@ public:
 private:
     // シーン読み込みの下請け
     bool LoadScene(const char* fbx_path);
-
+    
 private:
     // ufbx シーン本体（FbxSkeleton / FbxMesh はこれを参照して構築する）
     std::unique_ptr<ufbx_scene, void(*)(ufbx_scene*)> scene_{ nullptr, ufbx_free_scene };

@@ -11,7 +11,7 @@
 #include "Camera.h"
 
 #include <vector>
-
+#include <CommonStates.h>
 #include <GeometricPrimitive.h>
 
 using namespace DirectX;
@@ -34,13 +34,15 @@ namespace
     int g_hEnemy = -1;
     int g_hTriAvatar = -1;
 	int h_gOtherModel = -1;
+	int h_ground = -1;
 
     std::unique_ptr<DirectX::GeometricPrimitive> g_unitCube;
 
     void InitDebugPrimitives()
     {
-        auto device = Gfx::Ctx();
-        g_unitCube = DirectX::GeometricPrimitive::CreateCube(device);
+        auto cont = Gfx::Ctx();
+        g_unitCube = DirectX::GeometricPrimitive::CreateCube(cont, 1.0f, false);
+
     }
     void DrawUnitHeightBox()
     {
@@ -77,9 +79,9 @@ void App::Initialize(HWND hwnd, unsigned w, unsigned h)
 
     // 4) カメラ初期化
     Camera::Initialize();
-    Camera::SetPerspective(XMConvertToRadians(45.0f), float(w) / float(h));
-    Camera::SetPosition(XMVectorSet(0, 0.9, -5, 0));
-    Camera::SetTarget(XMVectorSet(0, 0.9, 0, 0));
+    Camera::SetPerspective(XMConvertToRadians(90.0f), float(w) / float(h));
+    Camera::SetPosition(XMVectorSet(0, 2, -5, 0));
+    Camera::SetTarget(XMVectorSet(0, 0, 0, 0));
 
     // モデル管理初期化
     Model::Initialize();
@@ -127,6 +129,8 @@ void App::Initialize(HWND hwnd, unsigned w, unsigned h)
     g_hTriAvatar = Model::Load(".\\Assets\\TriAvater.fbx", 1.5f);
    //g_hTriAvatar = Model::Load(".\\Assets\\tri2.fbx", 1.0f);
     // TriAvatar は今回は静的でもよいなら SetAnimFrame は省略可
+
+	h_ground = Model::Load(".\\Assets\\ita.fbx");
 
     InitDebugPrimitives();
     m_ready = true;
@@ -197,11 +201,11 @@ void App::Render()
 
     m_renderer.BeginFrame();
 
-    // カメラ行列（今は Model::Draw の中で Camera 取得しているので、
-    // ここで V/P を使わなくてもよい）
-    XMMATRIX V = Camera::GetViewMatrix();
-    XMMATRIX P = Camera::GetProjectionMatrix();
-
+    Transform tg;
+	tg.rotate_ = {0.0f, 90.0f, 0.0f };
+    tg.Calclation();
+    Model::SetTransform(h_ground, tg);
+    Model::Draw(h_ground);
 
     // SillyDancing を横一列に描画
     
@@ -215,6 +219,8 @@ void App::Render()
        temp.position_.x = 1.0f;
         Model::SetTransform(g_hSilly[0], temp);
         Model::Draw(g_hSilly[0]);
+		Model::DrawSkeleton(g_hSilly[0]);
+
     //    // スケルトンを重ねて描きたい場合は:
         // Model::DrawSkeleton(g_hSilly[i]);
     //}
@@ -238,6 +244,7 @@ void App::Render()
         tri.Calclation();  
         Model::SetTransform(g_hTriAvatar, tri);
         Model::Draw(g_hTriAvatar);
+		Model::DrawSkeleton(g_hTriAvatar);
 
         static Transform ken;
         ken.position_ = { -2.0f, 0.0f, 0.0f };
@@ -246,9 +253,6 @@ void App::Render()
 		ken.Calclation();
         Model::SetTransform(h_gOtherModel, ken);
 		Model::Draw(h_gOtherModel);
-
-
-
     }
 
     // 単位ボックス
