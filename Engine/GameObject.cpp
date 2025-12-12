@@ -1,5 +1,4 @@
 #include "GameObject.h"
-#include <algorithm>
 
 //-----------------------------------------------------------
 // コンストラクタ / デストラクタ
@@ -20,7 +19,18 @@ GameObject::~GameObject()
 }
 
 //-----------------------------------------------------------
-// 親子管理
+// Component
+//-----------------------------------------------------------
+void GameObject::AddComponent(Component* component)
+{
+    if (!component) return;
+
+    components_.push_back(component);
+    component->Initialize();
+}
+
+//-----------------------------------------------------------
+// 親子
 //-----------------------------------------------------------
 void GameObject::AddChild(GameObject* child)
 {
@@ -28,22 +38,7 @@ void GameObject::AddChild(GameObject* child)
 
     children_.push_back(child);
     child->parent_ = this;
-
-    // Transform の親子関係も接続
     child->transform_.pParent_ = &transform_;
-}
-
-void GameObject::RemoveChild(GameObject* child)
-{
-    if (!child) return;
-
-    auto it = std::find(children_.begin(), children_.end(), child);
-    if (it != children_.end())
-    {
-        (*it)->parent_ = nullptr;
-        (*it)->transform_.pParent_ = nullptr;
-        children_.erase(it);
-    }
 }
 
 //-----------------------------------------------------------
@@ -52,13 +47,17 @@ void GameObject::RemoveChild(GameObject* child)
 void GameObject::UpdateSub()
 {
     Update();
+    // ★ここで Transform を計算
+    transform_.Calculation();
+
+    for (Component* c : components_)
+    {
+        c->Update();
+    }
 
     for (GameObject* child : children_)
     {
-        if (child)
-        {
-            child->UpdateSub();
-        }
+        child->UpdateSub();
     }
 }
 
@@ -66,12 +65,14 @@ void GameObject::DrawSub()
 {
     Draw();
 
+    for (Component* c : components_)
+    {
+        c->Draw();
+    }
+
     for (GameObject* child : children_)
     {
-        if (child)
-        {
-            child->DrawSub();
-        }
+        child->DrawSub();
     }
 }
 
@@ -79,13 +80,17 @@ void GameObject::ReleaseSub()
 {
     Release();
 
+    for (Component* c : components_)
+    {
+        c->Release();
+        delete c;
+    }
+    components_.clear();
+
     for (GameObject* child : children_)
     {
-        if (child)
-        {
-            child->ReleaseSub();
-            delete child;
-        }
+        child->ReleaseSub();
+        delete child;
     }
     children_.clear();
 }

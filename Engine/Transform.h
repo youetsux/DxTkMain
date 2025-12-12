@@ -25,8 +25,8 @@ public:
     Transform();
     ~Transform();
 
-    void Calclation();                 // 設計は維持（非 const のまま）
-    void CalclationInternal() const;   // ★ const 版内部計算を追加
+    void Calculation();                 // 設計は維持（非 const のまま）
+    void CalculationInternal() const;   // ★ const 版内部計算を追加
     XMMATRIX GetWorldMatrix() const;   // ★ const 対応
 
     static XMFLOAT3 Float3Add(XMFLOAT3 a, XMFLOAT3 b)

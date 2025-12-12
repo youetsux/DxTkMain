@@ -1,5 +1,5 @@
 #pragma once
-#include "src/Scene.h"
+#include "Engine/Scene.h"
 
 
 class TestScene :
@@ -13,5 +13,8 @@ public:
     void Update() override;
     void Draw() override;
     void Release() override;
+
+private:
+	GameObject* actor_ = nullptr;
 };
 

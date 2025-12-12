@@ -24,10 +24,10 @@ Transform::~Transform()
 }
 
 //----------------------------------------------
-// 非 const の既存 Calclation（設計維持）
+// 非 const の既存 Calculation（設計維持）
 // → ユーザーが直接行列操作したい用途を壊さない
 //----------------------------------------------
-void Transform::Calclation()
+void Transform::Calculation()
 {
     matTranslate_ = XMMatrixTranslation(position_.x, position_.y, position_.z);
 
@@ -44,7 +44,7 @@ void Transform::Calclation()
 //----------------------------------------------
 // const 用内部計算（既存設計を壊さない）
 //----------------------------------------------
-void Transform::CalclationInternal() const
+void Transform::CalculationInternal() const
 {
     // 既存メンバ（matTranslate_ 等）も更新してよい
     // mutable にしている cachedWorld_ だけでなく、
@@ -81,19 +81,19 @@ void Transform::CalclationInternal() const
 //----------------------------------------------
 XMMATRIX Transform::GetWorldMatrix() const
 {
-    // 直接指定モードの時は常に CalclationInternal で OK
+    // 直接指定モードの時は常に CalculationInternal で OK
     if (!isSetDirect)
     {
         if (dirty_)
         {
-            CalclationInternal();
+            CalculationInternal();
         }
     }
     else
     {
         if (dirty_)
         {
-            CalclationInternal();
+            CalculationInternal();
         }
     }
 

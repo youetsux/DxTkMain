@@ -5,7 +5,8 @@
 #include "App.h"
 #include <mmsystem.h> // timeBeginPeriod / timeEndPeriod
 #include <cmath>
-#include "EngineTime.h"
+#include "..\Engine\EngineTime.h"
+#include "..\Engine\Input.h"
 
 #pragma comment(lib, "winmm.lib")
 
@@ -144,6 +145,11 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT m, WPARAM w, LPARAM l)
 {
+    if (g_ready)
+    {
+        Input::ProcessMessage(m, w, l); // ★追加：DXTK Keyboard にメッセージを渡す
+    }
+
     switch (m) {
     case WM_SIZE:
         if (g_ready) { gW = LOWORD(l); gH = HIWORD(l); g_app.OnResize(gW, gH); }
@@ -155,3 +161,4 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT m, WPARAM w, LPARAM l)
     }
     return DefWindowProcW(hWnd, m, w, l);
 }
+
