@@ -150,6 +150,7 @@
     <ClInclude Include="Engine\RootObject.h" />
     <ClInclude Include="Engine\scene.h" />
     <ClInclude Include="Engine\SceneManager.h" />
+    <ClInclude Include="Engine\Sound.h" />
     <ClInclude Include="Engine\Texture.h" />
     <ClInclude Include="Engine\Transform.h" />
     <ClInclude Include="Engine\ufbx.h" />
@@ -173,6 +174,7 @@
     <ClCompile Include="Engine\Renderer.cpp" />
     <ClCompile Include="Engine\RootObject.cpp" />
     <ClCompile Include="Engine\SceneManager.cpp" />
+    <ClCompile Include="Engine\Sound.cpp" />
     <ClCompile Include="Engine\Texture.cpp" />
     <ClCompile Include="Engine\Transform.cpp" />
     <ClCompile Include="Engine\ufbx.c" />

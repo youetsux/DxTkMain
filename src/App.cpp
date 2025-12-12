@@ -6,6 +6,7 @@
 #include "../Engine/EngineTime.h"
 #include "../Engine/Model.h"
 #include "../Engine/Input.h"
+#include "../Engine/Sound.h"
 
 //------------------------------------------------------------
 // 初期化
@@ -37,6 +38,8 @@ void App::Initialize(HWND hwnd, unsigned w, unsigned h)
 	// Input system
 	Input::Initialize(hwnd);
 
+	Sound::Initialize();
+
     // ★ SceneManager 初期化（TestScene が作られる）
     m_sceneManager.Initialize();
 
@@ -61,9 +64,11 @@ void App::Update()
 {
     if (!m_ready) return;
     Input::Update(); // Input 更新
-	Camera::Update(); // カメラ更新
-
+	Sound::Update(); // Sound 更新
+	
 	m_sceneManager.Update(); // ★ Scene 駆動更新
+
+    Camera::Update(); // カメラ更新
 }
 
 //------------------------------------------------------------
@@ -90,7 +95,7 @@ void App::Shutdown()
     if (!m_ready) return;
 
     m_sceneManager.Release();
-
+    Sound::Shutdown();
     Gfx::Reset();
     m_renderer = Renderer{};
     m_ready = false;
