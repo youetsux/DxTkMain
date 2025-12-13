@@ -16,6 +16,24 @@
     <Filter Include="ソース ファイル\Engine">
       <UniqueIdentifier>{a21b6c3a-df94-49ee-8ce4-e331ca331f88}</UniqueIdentifier>
     </Filter>
+    <Filter Include="ソース ファイル\Engine\Camera">
+      <UniqueIdentifier>{c3f742ca-d492-4181-973b-5593f567942e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ソース ファイル\Engine\Fbx">
+      <UniqueIdentifier>{c43a9564-e6a6-445f-82ad-eb8acc7353b3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ソース ファイル\Engine\Core">
+      <UniqueIdentifier>{94c96eae-cf64-4292-bf45-e9d519c9a5ed}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ソース ファイル\Engine\Model">
+      <UniqueIdentifier>{689139fc-b2f4-46ac-a10a-2f4e916e30af}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ソース ファイル\Engine\Scene">
+      <UniqueIdentifier>{e11c2bd8-6896-4bc2-85cc-bf062a85cd0c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ソース ファイル\Engine\Components">
+      <UniqueIdentifier>{c7e31e2e-ac9a-4b09-b803-fb01f634837c}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
@@ -23,158 +41,158 @@
   <ItemGroup>
     <Text Include="src\README.txt" />
     <Text Include="Engine\README.txt">
-      <Filter>ソース ファイル\Engine</Filter>
+      <Filter>ソース ファイル\Engine\Fbx</Filter>
     </Text>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="ModelComponent.h">
-      <Filter>ヘッダー ファイル</Filter>
-    </ClInclude>
     <ClInclude Include="TestScene.h">
       <Filter>ヘッダー ファイル</Filter>
-    </ClInclude>
-    <ClInclude Include="src\App.h">
-      <Filter>ヘッダー ファイル</Filter>
-    </ClInclude>
-    <ClInclude Include="Engine\BoundingVolume.h">
-      <Filter>ソース ファイル\Engine</Filter>
-    </ClInclude>
-    <ClInclude Include="Engine\Camera.h">
-      <Filter>ソース ファイル\Engine</Filter>
-    </ClInclude>
-    <ClInclude Include="Engine\component.h">
-      <Filter>ソース ファイル\Engine</Filter>
-    </ClInclude>
-    <ClInclude Include="Engine\DeviceResources.h">
-      <Filter>ソース ファイル\Engine</Filter>
-    </ClInclude>
-    <ClInclude Include="Engine\EngineTime.h">
-      <Filter>ソース ファイル\Engine</Filter>
-    </ClInclude>
-    <ClInclude Include="Engine\FbxMesh.h">
-      <Filter>ソース ファイル\Engine</Filter>
-    </ClInclude>
-    <ClInclude Include="Engine\FbxModel.h">
-      <Filter>ソース ファイル\Engine</Filter>
-    </ClInclude>
-    <ClInclude Include="Engine\FbxSkeleton.h">
-      <Filter>ソース ファイル\Engine</Filter>
-    </ClInclude>
-    <ClInclude Include="Engine\GameObject.h">
-      <Filter>ソース ファイル\Engine</Filter>
-    </ClInclude>
-    <ClInclude Include="Engine\Gfx.h">
-      <Filter>ソース ファイル\Engine</Filter>
-    </ClInclude>
-    <ClInclude Include="Engine\GfxState.h">
-      <Filter>ソース ファイル\Engine</Filter>
-    </ClInclude>
-    <ClInclude Include="Engine\Model.h">
-      <Filter>ソース ファイル\Engine</Filter>
     </ClInclude>
     <ClInclude Include="Engine\Quad.h">
       <Filter>ソース ファイル\Engine</Filter>
     </ClInclude>
+    <ClInclude Include="Engine\Camera.h">
+      <Filter>ソース ファイル\Engine\Camera</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\FbxMesh.h">
+      <Filter>ソース ファイル\Engine\Fbx</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\FbxModel.h">
+      <Filter>ソース ファイル\Engine\Fbx</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\FbxSkeleton.h">
+      <Filter>ソース ファイル\Engine\Fbx</Filter>
+    </ClInclude>
+    <ClInclude Include="src\App.h">
+      <Filter>ソース ファイル\Engine\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\DeviceResources.h">
+      <Filter>ソース ファイル\Engine\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\EngineTime.h">
+      <Filter>ソース ファイル\Engine\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\GameObject.h">
+      <Filter>ソース ファイル\Engine\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\Gfx.h">
+      <Filter>ソース ファイル\Engine\Core</Filter>
+    </ClInclude>
     <ClInclude Include="Engine\Renderer.h">
-      <Filter>ソース ファイル\Engine</Filter>
+      <Filter>ソース ファイル\Engine\Core</Filter>
     </ClInclude>
     <ClInclude Include="Engine\RootObject.h">
-      <Filter>ソース ファイル\Engine</Filter>
+      <Filter>ソース ファイル\Engine\Core</Filter>
     </ClInclude>
     <ClInclude Include="Engine\scene.h">
-      <Filter>ソース ファイル\Engine</Filter>
+      <Filter>ソース ファイル\Engine\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\component.h">
+      <Filter>ソース ファイル\Engine\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\Model.h">
+      <Filter>ソース ファイル\Engine\Model</Filter>
     </ClInclude>
     <ClInclude Include="Engine\SceneManager.h">
-      <Filter>ソース ファイル\Engine</Filter>
-    </ClInclude>
-    <ClInclude Include="Engine\Texture.h">
-      <Filter>ソース ファイル\Engine</Filter>
+      <Filter>ソース ファイル\Engine\Scene</Filter>
     </ClInclude>
     <ClInclude Include="Engine\Transform.h">
-      <Filter>ソース ファイル\Engine</Filter>
+      <Filter>ソース ファイル\Engine\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\GfxState.h">
+      <Filter>ソース ファイル\Engine\Core</Filter>
     </ClInclude>
     <ClInclude Include="Engine\ufbx.h">
-      <Filter>ソース ファイル\Engine</Filter>
+      <Filter>ソース ファイル\Engine\Fbx</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\Texture.h">
+      <Filter>ソース ファイル\Engine\Core</Filter>
     </ClInclude>
     <ClInclude Include="Engine\UfbxUtil.h">
-      <Filter>ソース ファイル\Engine</Filter>
+      <Filter>ソース ファイル\Engine\Fbx</Filter>
     </ClInclude>
     <ClInclude Include="Engine\Input.h">
-      <Filter>ヘッダー ファイル</Filter>
+      <Filter>ソース ファイル\Engine\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\BoundingVolume.h">
+      <Filter>ソース ファイル\Engine\Core</Filter>
     </ClInclude>
     <ClInclude Include="Engine\Sound.h">
-      <Filter>ヘッダー ファイル</Filter>
+      <Filter>ソース ファイル\Engine\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="ModelComponent.h">
+      <Filter>ソース ファイル\Engine\Components</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="TestScene.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
-    <ClCompile Include="src\App.cpp">
-      <Filter>ソース ファイル\Engine</Filter>
-    </ClCompile>
-    <ClCompile Include="Engine\Camera.cpp">
-      <Filter>ソース ファイル\Engine</Filter>
-    </ClCompile>
-    <ClCompile Include="Engine\DeviceResources.cpp">
-      <Filter>ソース ファイル\Engine</Filter>
-    </ClCompile>
-    <ClCompile Include="Engine\EngineTime.cpp">
-      <Filter>ソース ファイル\Engine</Filter>
-    </ClCompile>
-    <ClCompile Include="Engine\FbxMesh.cpp">
-      <Filter>ソース ファイル\Engine</Filter>
-    </ClCompile>
-    <ClCompile Include="Engine\FbxModel.cpp">
-      <Filter>ソース ファイル\Engine</Filter>
-    </ClCompile>
-    <ClCompile Include="Engine\FbxSkeleton.cpp">
-      <Filter>ソース ファイル\Engine</Filter>
-    </ClCompile>
-    <ClCompile Include="Engine\GameObject.cpp">
-      <Filter>ソース ファイル\Engine</Filter>
-    </ClCompile>
-    <ClCompile Include="Engine\Gfx.cpp">
-      <Filter>ソース ファイル\Engine</Filter>
-    </ClCompile>
     <ClCompile Include="src\Main.cpp">
-      <Filter>ソース ファイル\Engine</Filter>
-    </ClCompile>
-    <ClCompile Include="Engine\Model.cpp">
-      <Filter>ソース ファイル\Engine</Filter>
-    </ClCompile>
-    <ClCompile Include="ModelComponent.cpp">
       <Filter>ソース ファイル\Engine</Filter>
     </ClCompile>
     <ClCompile Include="Engine\Quad.cpp">
       <Filter>ソース ファイル\Engine</Filter>
     </ClCompile>
+    <ClCompile Include="Engine\Camera.cpp">
+      <Filter>ソース ファイル\Engine\Camera</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\FbxMesh.cpp">
+      <Filter>ソース ファイル\Engine\Fbx</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\FbxModel.cpp">
+      <Filter>ソース ファイル\Engine\Fbx</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\FbxSkeleton.cpp">
+      <Filter>ソース ファイル\Engine\Fbx</Filter>
+    </ClCompile>
+    <ClCompile Include="src\App.cpp">
+      <Filter>ソース ファイル\Engine\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\DeviceResources.cpp">
+      <Filter>ソース ファイル\Engine\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\EngineTime.cpp">
+      <Filter>ソース ファイル\Engine\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\GameObject.cpp">
+      <Filter>ソース ファイル\Engine\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\Gfx.cpp">
+      <Filter>ソース ファイル\Engine\Core</Filter>
+    </ClCompile>
     <ClCompile Include="Engine\Renderer.cpp">
-      <Filter>ソース ファイル\Engine</Filter>
+      <Filter>ソース ファイル\Engine\Core</Filter>
     </ClCompile>
     <ClCompile Include="Engine\RootObject.cpp">
-      <Filter>ソース ファイル\Engine</Filter>
+      <Filter>ソース ファイル\Engine\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\Model.cpp">
+      <Filter>ソース ファイル\Engine\Model</Filter>
     </ClCompile>
     <ClCompile Include="Engine\SceneManager.cpp">
-      <Filter>ソース ファイル\Engine</Filter>
-    </ClCompile>
-    <ClCompile Include="Engine\Texture.cpp">
-      <Filter>ソース ファイル\Engine</Filter>
+      <Filter>ソース ファイル\Engine\Scene</Filter>
     </ClCompile>
     <ClCompile Include="Engine\Transform.cpp">
-      <Filter>ソース ファイル\Engine</Filter>
+      <Filter>ソース ファイル\Engine\Core</Filter>
     </ClCompile>
     <ClCompile Include="Engine\ufbx.c">
-      <Filter>ソース ファイル\Engine</Filter>
+      <Filter>ソース ファイル\Engine\Fbx</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\Texture.cpp">
+      <Filter>ソース ファイル\Engine\Core</Filter>
     </ClCompile>
     <ClCompile Include="Engine\UfbxUtil.cpp">
-      <Filter>ソース ファイル\Engine</Filter>
+      <Filter>ソース ファイル\Engine\Fbx</Filter>
     </ClCompile>
     <ClCompile Include="Engine\Input.cpp">
-      <Filter>ソース ファイル</Filter>
+      <Filter>ソース ファイル\Engine\Core</Filter>
     </ClCompile>
     <ClCompile Include="Engine\Sound.cpp">
-      <Filter>ソース ファイル</Filter>
+      <Filter>ソース ファイル\Engine\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="ModelComponent.cpp">
+      <Filter>ソース ファイル\Engine\Components</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>

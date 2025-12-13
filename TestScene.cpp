@@ -63,8 +63,8 @@ void TestScene::Update()
         t.position_.z
     };
 
-    Camera::SetPosition({ eye.x, eye.y, eye.z });
-    Camera::SetTarget({at.x, at.y, at.z});
+    //Camera::SetPosition({ eye.x, eye.y, eye.z });
+    //Camera::SetTarget({at.x, at.y, at.z});
 
     if(Input::IsKeyDown(VK_SPACE))
     {
