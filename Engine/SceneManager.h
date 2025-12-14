@@ -1,6 +1,9 @@
 #pragma once
 #include "Scene.h"
 
+// ★変更：Renderer の前方宣言（依存を増やしすぎない）
+class Renderer;
+
 //ゲームに登場するシーン
 enum SCENE_ID
 {
@@ -22,7 +25,14 @@ public:
 
     void Initialize();
     void Update();
+
+    // 既存の即時描画経路（維持）
     void Draw();
+
+    // ★変更：段階移行用（Submit → Execute 方式へ移行するための入口）
+    //  この段階では中身は Draw() と同じ処理を行う（動作維持）
+    void SubmitDraw(Renderer& renderer);
+
     void Release();
 
     // シーン切り替え（次の Update() 冒頭で反映）

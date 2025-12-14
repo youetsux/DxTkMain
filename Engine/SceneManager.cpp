@@ -2,6 +2,9 @@
 
 #include "../TestScene.h"
 
+// ★変更：SubmitDraw の引数型のため（将来的にRendererへ要求を積む）
+#include "Renderer.h"
+
 //-----------------------------------------------------------
 // コンストラクタ/デストラクタ
 //-----------------------------------------------------------
@@ -59,7 +62,7 @@ void SceneManager::Update()
 }
 
 //-----------------------------------------------------------
-// 描画
+// 描画（既存：即時描画経路）
 //-----------------------------------------------------------
 void SceneManager::Draw()
 {
@@ -69,6 +72,21 @@ void SceneManager::Draw()
         currentScene_->Draw();
 
         // GameObject ツリーの描画
+        currentScene_->Root().DrawSub();
+    }
+}
+
+//-----------------------------------------------------------
+// ★変更：段階移行用 SubmitDraw
+//  - この段階では Draw() と同じ処理（動作維持）
+//  - 次のステップで Component 側を Submit 方式に寄せていく
+//-----------------------------------------------------------
+void SceneManager::SubmitDraw(Renderer& /*renderer*/)
+{
+    if (currentScene_)
+    {
+        // 現段階では “積む” ではなく、従来通り描画を実行して動作維持
+        currentScene_->Draw();
         currentScene_->Root().DrawSub();
     }
 }

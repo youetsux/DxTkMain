@@ -21,12 +21,17 @@ TestScene::~TestScene()
 void TestScene::Initialize()
 {
     actor_ = new GameObject(&Root(), "Actor");
+    auto mc = new ModelComponent(actor_, "Assets/SillyDancing.fbx", 1.0f);
 
     // モデル（必要に応じてパス・正規化高さを調整）
-    actor_->AddComponent(new ModelComponent(actor_, "Assets/ShachikuChan.fbx", 2.5f));
+    actor_->AddComponent(mc);
 
     // 初期位置
     actor_->GetTransform().position_ = { 0.0f, 0.0f, 0.0f };
+ 	mc->SetAnimStack(1);
+    mc->SetAnimRange(0, 229, 1.0f);
+    mc->SetLoop(true);
+
 }
 
 void TestScene::Update()
@@ -38,11 +43,11 @@ void TestScene::Update()
     // --- 入力で左右に動かす（追従が分かりやすいので一緒に） ---
     if (Input::IsKey(VK_LEFT))
     {
-        actor_->GetTransform().position_.x -= 2.0f * dt;
+        actor_->GetTransform().position_.x -= 1.0f * dt;
     }
     if (Input::IsKey(VK_RIGHT))
     {
-        actor_->GetTransform().position_.x += 2.0f * dt;
+        actor_->GetTransform().position_.x += 1.0f * dt;
     }
 
     // --- 追従カメラ（最小） ---
