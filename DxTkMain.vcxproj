@@ -138,6 +138,7 @@
     <ClInclude Include="Engine\DeviceResources.h" />
     <ClInclude Include="Engine\EngineTime.h" />
     <ClInclude Include="Engine\FbxMesh.h" />
+    <ClInclude Include="Engine\FbxMeshGroup.h" />
     <ClInclude Include="Engine\FbxModel.h" />
     <ClInclude Include="Engine\FbxSkeleton.h" />
     <ClInclude Include="Engine\GameObject.h" />
@@ -164,6 +165,7 @@
     <ClCompile Include="Engine\DeviceResources.cpp" />
     <ClCompile Include="Engine\EngineTime.cpp" />
     <ClCompile Include="Engine\FbxMesh.cpp" />
+    <ClCompile Include="Engine\FbxMeshGroup.cpp" />
     <ClCompile Include="Engine\FbxModel.cpp" />
     <ClCompile Include="Engine\FbxSkeleton.cpp" />
     <ClCompile Include="Engine\GameObject.cpp" />
