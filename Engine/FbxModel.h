@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 #pragma once
 
 #include <memory>
@@ -18,20 +18,20 @@ enum class SizeMeasureAxis
     WidthX,       // max.x - min.x
     DepthZ,       // max.z - min.z
     MaxExtent,    // max(x,y,z)
-    Radius,       // ‹…”¼Œai•K—v‚È‚çj
+    Radius,       // aiKvÈ‚j
 };
 
 
-// ufbx ‚ğ‘O•ûéŒ¾iƒwƒbƒ_‚É’¼ˆË‘¶‚µ‚È‚¢‚æ‚¤‚É‚·‚éj
+// ufbx OéŒ¾iwb_É’Ë‘È‚æ‚¤É‚j
 struct ufbx_scene;
 struct ufbx_anim;
 
 //======================================================================
 // FbxModel
-//   - ufbx_scene ‚ÌŠ—L
-//   - FbxSkeletoniƒ{[ƒ“•ƒAƒjƒ[ƒVƒ‡ƒ“j
-//   - FbxMeshiƒƒbƒVƒ…•ƒeƒNƒXƒ`ƒƒ••`‰æj
-// ‚ğ‚Ü‚Æ‚ß‚Äˆµ‚¤ƒNƒ‰ƒX
+//   - ufbx_scene ÌL
+//   - FbxSkeletoni{[Aj[Vj
+//   - FbxMeshibVeNX``j
+// Ü‚Æ‚ß‚ÄˆNX
 //======================================================================
 class FbxModel
 {
@@ -40,44 +40,53 @@ public:
     ~FbxModel();
 
     // ------------------------------------------------------------
-    // “Ç‚İ‚İE”jŠü
+    // Ç‚İİEj
     // ------------------------------------------------------------
 
-    // FBX ƒtƒ@ƒCƒ‹‚ğ“Ç‚İ‚ñ‚ÅAƒXƒPƒ‹ƒgƒ“•ƒƒbƒVƒ…‚ğ\’z
+    // FBX t@CÇ‚İÅAXPgbV\z
     bool Load(const char* fbx_path);
 
-    // –¾¦“I‚ÈƒŠƒZƒbƒgiÄ—˜—p‚µ‚½‚¢ê‡‚È‚Çj
+    // IÈƒZbgiÄ—pê‡È‚Çj
     void Reset();
 
     // ------------------------------------------------------------
-    // •`‰æ
+    // `
     // ------------------------------------------------------------
 
-    // ƒƒbƒVƒ…•`‰æiCPU ƒXƒLƒjƒ“ƒO‚İj
+    // bV`iCPU XLjOİj
     void Draw(const DirectX::XMMATRIX& world,
         const DirectX::XMMATRIX& view,
         const DirectX::XMMATRIX& proj);
 
-    // ƒXƒPƒ‹ƒgƒ“‚ÌƒfƒoƒbƒO•`‰æiƒ{[ƒ“ƒ‰ƒCƒ“‚È‚Çj
+    // XPgÌƒfobO`i{[CÈ‚Çj
     void DrawSkeleton(const DirectX::XMMATRIX& world,
         const DirectX::XMMATRIX& view,
         const DirectX::XMMATRIX& proj);
 
-    // ------------------------------------------------------------
-    // ƒAƒjƒ[ƒVƒ‡ƒ“§Œä
-    // ------------------------------------------------------------
 
-    // ƒV[ƒ“‚ÉŠÜ‚Ü‚ê‚éuƒfƒtƒHƒ‹ƒgƒAƒjƒv‚ğ•Ô‚·i‚È‚¯‚ê‚Î nullptrj
+    // ------------------------------------------------------------
+    // Debug (Step4): Sub-mesh solo draw (multi-mesh only)
+    //   -1: draw all (default)
+    //  0..N-1: draw only that sub-mesh index (for visual verification)
+    // ------------------------------------------------------------
+    void SetDebugDrawMeshIndex(int index) { debug_draw_mesh_index_ = index; }
+    int  GetDebugDrawMeshIndex() const { return debug_draw_mesh_index_; }
+
+    // ------------------------------------------------------------
+        // Aj[V
+        // ------------------------------------------------------------
+
+        // V[ÉŠÜ‚Ü‚uftHgAjvÔ‚iÈ‚ nullptrj
     const ufbx_anim* GetDefaultAnim() const;
 
-    // ƒfƒtƒHƒ‹ƒgƒAƒjƒ‚Ì t_sec ‚ÅƒXƒPƒ‹ƒgƒ“‚ğXV
+    // ftHgAjÌ t_sec ÅƒXPgXV
     void UpdateSkeletonAtTime(double t_sec);
 
-    // –¾¦“I‚É anim ‚ğw’è‚µ‚Ä t_sec ‚Ìp¨‚ÉXV
+    // I anim wè‚µÄ t_sec ÌpÉXV
     void UpdateSkeletonAtTime(const ufbx_anim* anim, double t_sec);
 
     // ------------------------------------------------------------
-    // ƒAƒNƒZƒT
+    // ANZT
     // ------------------------------------------------------------
     const ufbx_scene* Scene()       const { return scene_.get(); }
     FbxSkeleton& Skeleton() { return skeleton_; }
@@ -85,36 +94,39 @@ public:
     FbxMesh& Mesh() { return mesh_; }
     const FbxMesh& Mesh()        const { return mesh_; }
 
-    // BV ƒAƒNƒZƒTiMesh ‚ÉƒtƒHƒ[ƒhj
+    // BV ANZTiMesh ÉƒtH[hj
     BVolume& GetBV() { return mesh_.GetBV(); }
     const BVolume& GetBV() const { return mesh_.GetBV(); }
 
-    // ƒV[ƒ“”¼ŒaƒAƒNƒZƒTiSkeleton ‚ÉƒtƒHƒ[ƒhj
+    // V[aANZTiSkeleton ÉƒtH[hj
     float SceneRadius();
-    float SceneHeight();   // ’Ç‰ÁFY ‚‚³imaxY - minYj
+    float SceneHeight();   // Ç‰FY imaxY - minYj
     float MeasureSize(SizeMeasureAxis axis);
     float MeasureSkinnedHeightY();
 
     // ------------------------------------------------------------
-    // Step1: ‘g‚İ‚İ€”õi‚Ü‚¾–¢g—pj
+    // Step1: gİİiÜ‚gpj
     // ------------------------------------------------------------
     FbxMeshGroup& MeshGroup() { return mesh_group_; }
     const FbxMeshGroup& MeshGroup() const { return mesh_group_; }
 
 private:
-    // ƒV[ƒ““Ç‚İ‚İ‚Ì‰º¿‚¯
+    // V[Ç‚İİ‚Ì‰
     bool LoadScene(const char* fbx_path);
 
 private:
-    // ufbx ƒV[ƒ“–{‘ÌiFbxSkeleton / FbxMesh ‚Í‚±‚ê‚ğQÆ‚µ‚Ä\’z‚·‚éj
+    // ufbx V[{ÌiFbxSkeleton / FbxMesh Í‚QÆ‚Ä\zj
     std::unique_ptr<ufbx_scene, void(*)(ufbx_scene*)> scene_{ nullptr, ufbx_free_scene };
 
-    // ƒ{[ƒ“•ƒAƒjƒ[ƒVƒ‡ƒ“î•ñ
+    // {[Aj[V
     FbxSkeleton skeleton_;
 
-    // ƒƒbƒVƒ…{ƒeƒNƒXƒ`ƒƒ{•`‰æî•ñi’PˆêŒİŠ·‚ÌŠù‘¶Œo˜Hj
+    // bV{eNX`{`iPİŠÌŠoHj
     FbxMesh     mesh_;
 
-    // •¡”ƒm[ƒh/•¡”ƒƒbƒVƒ…—piStep1‚Å‚Í•Û‚Ì‚İB“®ì‚Í•Ï‚¦‚È‚¢j
+    // m[h/bVpiStep1Å‚Í•ÛÌ‚İBÍ•Ï‚È‚j
+    // Debug: draw only one sub-mesh in mesh_group_ (-1 = all)
+    int debug_draw_mesh_index_ = -1;
+
     FbxMeshGroup mesh_group_;
 };

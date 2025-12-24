@@ -1,4 +1,4 @@
-#define WIN32_LEAN_AND_MEAN
+Ôªø#define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <Windows.h>
 
@@ -10,10 +10,10 @@
 #include <new> // placement new
 
 //------------------------------------------------------------
-// ïœçXì_ÅiÉrÉãÉhèCê≥Åj
-// - FbxMesh ÇÕ unique_ptr ÇéùÇ¬ÇΩÇﬂÉRÉsÅ[ë„ì¸ïsâ¬ÅB
-//   Reset() Ç≈Åuë„ì¸Ç≈èâä˙âªÅvÇπÇ∏ÅAñæé¶ìIÇ…îjä¸Å®çƒç\ízÇ∑ÇÈÅB
-// - Step1: mesh_group_ Çí«â¡ÇµÇΩÇÃÇ≈ Reset() Ç≈ Clear() Ç∑ÇÈÅB
+// Step3 œçX_
+// - Draw() ï™äF
+//    mesh_group_ »Ç mesh_group_.Draw()
+//    »Ç] Ç mesh_.Draw()
 //------------------------------------------------------------
 
 FbxModel::FbxModel()
@@ -30,18 +30,18 @@ FbxModel::~FbxModel()
 //============================================================
 void FbxModel::Reset()
 {
-    // scene ÇÃâï˙
+    // scene Ãâ
     scene_.reset(nullptr);
 
-    // Å¶ ÉRÉsÅ[/ÉÄÅ[Éuë„ì¸Ç…óäÇÁÇ∏Åuîjä¸Å®çƒç\ízÅvÇ∑ÇÈ
-    //    ÅiFbxMesh Ç™ÉRÉsÅ[ïsâ¬Ç»ÇΩÇﬂÅj
+    //  Rs[/[u…óÁÇ∏ujƒç\zv
+    //    iFbxMesh Rs[s¬Ç»ÇﬂÅj
     skeleton_.~FbxSkeleton();
     new (&skeleton_) FbxSkeleton();
 
     mesh_.~FbxMesh();
     new (&mesh_) FbxMesh();
 
-    // Step1: ÉOÉãÅ[ÉvÇ‡écä[ÇécÇ≥Ç»Ç¢ÅiÇ‹Çæñ¢égópÅj
+    // Step1/2/3: O[vc[c»Ç
     mesh_group_.Clear();
 }
 
@@ -92,7 +92,7 @@ float FbxModel::MeasureSkinnedHeightY()
 {
     const auto& md = mesh_.Data();
 
-    // ÉXÉLÉjÉìÉOåãâ í∏ì_Ç™óLå¯Ç»ÇÁÇªÇÍÇégÇ§
+    // XLjO í_L»ÇÁÇªg
     if (!md.skinned_vertices_.empty() && !md.influences_.empty() && !md.bind_vertices_.empty())
     {
         float minY = FLT_MAX;
@@ -105,12 +105,12 @@ float FbxModel::MeasureSkinnedHeightY()
         return (maxY - minY);
     }
 
-    // Ç‹ÇæÉXÉLÉjÉìÉOåãâ Ç™ñ≥Ç¢ÅiÇ‹ÇΩÇÕÉXÉLÉìñ≥ÇµÅjÇ»ÇÁ AABB çÇÇ≥
+    // ‹ÇXLjO Çi‹ÇÕÉXLj»Ç AABB 
     return MeasureSize(SizeMeasureAxis::HeightY);
 }
 
 //============================================================
-// LoadSceneÅiì‡ïîÅj
+// LoadSceneij
 //============================================================
 bool FbxModel::LoadScene(const char* fbx_path)
 {
@@ -120,7 +120,7 @@ bool FbxModel::LoadScene(const char* fbx_path)
     std::memset(&err, 0, sizeof(err));
     std::memset(&opts, 0, sizeof(opts));
 
-    // DirectX å¸ÇØç¿ïWån
+    // DirectX Wn
     opts.target_axes = ufbx_axes_left_handed_y_up;
     opts.handedness_conversion_axis = UFBX_MIRROR_AXIS_Z;
 
@@ -149,17 +149,67 @@ bool FbxModel::Load(const char* fbx_path)
         return false;
     }
 
-    // Skeleton ç\íz
+    // Skeleton \z
     if (!skeleton_.BuildFromScene(scene)) {
         return false;
     }
 
-    // Mesh ç\ízÅiåªèÛÇÕíPàÍÉÅÉbÉVÉÖåoòHÅj
+    // ------------------------------------------------------------
+    // Step2: m[h/bV
+    //   - node->mesh ¬Ém[hêîÇ
+    // ------------------------------------------------------------
+    size_t mesh_node_count = 0;
+    for (size_t i = 0; i < scene->nodes.count; ++i)
+    {
+        const ufbx_node* node = scene->nodes.data[i];
+        if (!node) continue;
+        if (!node->mesh) continue;
+
+        // ÛÉÅÉbVÕèOiOÃÇﬂÅj
+        const ufbx_mesh* m = node->mesh;
+        if (m->num_faces == 0) continue;
+
+        ++mesh_node_count;
+    }
+
+    // ------------------------------------------------------------
+    // ›ä€é: ]ÃíPÍÉÅbVoHÕïK\z
+    // ------------------------------------------------------------
     if (!mesh_.BuildFromScene(scene, skeleton_, fbx_path)) {
         return false;
     }
 
-    // èâä˙épê®
+    // ------------------------------------------------------------
+    // Step2: bV»ÇA«â group \zƒÇ
+    // ------------------------------------------------------------
+    if (mesh_node_count >= 2)
+    {
+        mesh_group_.Clear();
+
+        for (size_t i = 0; i < scene->nodes.count; ++i)
+        {
+            const ufbx_node* node = scene->nodes.data[i];
+            if (!node) continue;
+            if (!node->mesh) continue;
+
+            const ufbx_mesh* m = node->mesh;
+            if (m->num_faces == 0) continue;
+
+            std::unique_ptr<FbxMesh> sub = std::make_unique<FbxMesh>();
+            if (!sub->BuildFromNode(scene, node, skeleton_, fbx_path))
+            {
+                return false;
+            }
+
+            mesh_group_.AddMesh(std::move(sub));
+        }
+
+        if (mesh_group_.Empty()) {
+            return false;
+        }
+    }
+
+    // p
     UpdateSkeletonAtTime(0.0);
     return true;
 }
@@ -176,7 +226,7 @@ const ufbx_anim* FbxModel::GetDefaultAnim() const
 }
 
 //============================================================
-// UpdateSkeletonAtTimeÅiÉfÉtÉHÉãÉgÉAÉjÉÅÅj
+// UpdateSkeletonAtTimeiftHgAjj
 //============================================================
 void FbxModel::UpdateSkeletonAtTime(double t_sec)
 {
@@ -186,7 +236,7 @@ void FbxModel::UpdateSkeletonAtTime(double t_sec)
 }
 
 //============================================================
-// UpdateSkeletonAtTimeÅiñæé¶ÉAÉjÉÅÅj
+// UpdateSkeletonAtTimeiAjj
 //============================================================
 void FbxModel::UpdateSkeletonAtTime(const ufbx_anim* anim, double t_sec)
 {
@@ -195,18 +245,35 @@ void FbxModel::UpdateSkeletonAtTime(const ufbx_anim* anim, double t_sec)
 }
 
 //============================================================
-// DrawÅiCPU ÉXÉLÉjÉìÉOÅ{ï`âÊÅj
+// DrawiCPU XLjO{`j
+//  Step3: group  group `
 //============================================================
 void FbxModel::Draw(
     const DirectX::XMMATRIX& world,
     const DirectX::XMMATRIX& view,
     const DirectX::XMMATRIX& proj)
 {
+    if (!mesh_group_.Empty())
+    {
+        const int idx = debug_draw_mesh_index_;
+        if (idx >= 0 && idx < (int)mesh_group_.MeshCount())
+        {
+            // Step4: solo draw
+            mesh_group_.Meshes()[(size_t)idx]->Draw(world, view, proj, skeleton_);
+        }
+        else
+        {
+            // default: draw all
+            mesh_group_.Draw(world, view, proj, skeleton_);
+        }
+        return;
+    }
+
     mesh_.Draw(world, view, proj, skeleton_);
 }
 
 //============================================================
-// DrawSkeletonÅiÉfÉoÉbÉOÅj
+// DrawSkeletonifobOj
 //============================================================
 void FbxModel::DrawSkeleton(
     const DirectX::XMMATRIX& world,

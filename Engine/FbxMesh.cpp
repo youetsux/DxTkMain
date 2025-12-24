@@ -1,4 +1,4 @@
-// FbxMesh.cpp
+ï»¿// FbxMesh.cpp
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <Windows.h>
@@ -24,13 +24,18 @@
 using Microsoft::WRL::ComPtr;
 
 //------------------------------------------------------------
-// ƒrƒ‹ƒh—pƒRƒ“ƒeƒLƒXƒg
+// rhpReLXg
+//------------------------------------------------------------
+// rhpReLXg
 //------------------------------------------------------------
 struct BuildContext
 {
     const ufbx_mesh* mesh = nullptr;
     const ufbx_vertex_vec2* uvv = nullptr;
     const std::vector<FbxMesh::VertexInfluence>* infl_per_vtx = nullptr;
+
+    // m[hÊƒbV transform Ä‚ŞiPêƒbVİŠ identity Ì‚Ü‚Üj
+    DirectX::XMMATRIX geo = DirectX::XMMatrixIdentity();
 };
 
 namespace
@@ -39,7 +44,7 @@ namespace
     namespace fs = std::filesystem;
 
     // ------------------------------------------------------------
-    // ƒ{[ƒ“ƒEƒFƒCƒg‚Ìƒ\[ƒg—p
+    // {[EFCgÌƒ\[gp
     // ------------------------------------------------------------
     bool CompareBoneWeightPair(
         const std::pair<uint16_t, float>& a,
@@ -49,7 +54,7 @@ namespace
     }
 
     // ------------------------------------------------------------
-    // ƒXƒLƒ“î•ñ‚ğ\’zi1 ƒƒbƒVƒ…’PˆÊj
+    // XL\zi1 bVPÊj
     // ------------------------------------------------------------
     void BuildInfluencesForMesh(
         const ufbx_mesh* mesh,
@@ -69,7 +74,7 @@ namespace
         const ufbx_skin_vertex_list& vtx_list = skin->vertices;
         const ufbx_skin_weight_list& w_list = skin->weights;
 
-        // ˆê’Uuƒ{[ƒ“”Ô†{ƒEƒFƒCƒgv‚ÌƒŠƒXƒg‚ğ‚½‚ß‚Ä‚©‚ç 4 –{‚Éi‚é
+        // Uu{[Ô{EFCgvÌƒXgß‚Ä‚ 4 {Éi
         std::vector<std::vector<std::pair<uint16_t, float>>> acc(mesh->num_vertices);
 
         for (size_t v = 0; v < vtx_list.count; ++v) {
@@ -92,7 +97,7 @@ namespace
             }
         }
 
-        // 4 –{‚Ü‚Å‚Éi‚Á‚Ä³‹K‰»
+        // 4 {Ü‚Å‚ÉiÄK
         for (size_t v = 0; v < acc.size(); ++v) {
             auto& list = acc[v];
             if (list.empty()) continue;
@@ -120,7 +125,7 @@ namespace
     }
 
     // ------------------------------------------------------------
-    // ƒ}ƒeƒŠƒAƒ‹^ƒeƒNƒXƒ`ƒƒ‚É‘Î‰‚µ‚½ UV ƒZƒbƒg‚ğ‘I‚Ô
+    // }eA^eNX`É‘Î‰ UV ZbgI
     // ------------------------------------------------------------
     const ufbx_vertex_vec2* ChooseUVSet(
         const ufbx_mesh* mesh,
@@ -158,15 +163,21 @@ void FbxMesh::EmitCorner(
 
     const ufbx_mesh* mesh = ctx.mesh;
 
-    // ˆÊ’u
+    // Ê’u
     uint32_t pi = UfbxUtil::ValueIndexOf(mesh->vertex_position, corner, vtx);
     ufbx_vec3 p = mesh->vertex_position.values.data[pi];
     XMFLOAT3 P((float)p.x, (float)p.y, (float)p.z);
 
-    // AABB XV
+    // m[h transform Ä‚Şim[hfÎj
+    {
+        DirectX::XMVECTOR pv = UfbxUtil::TransformPosition(P, ctx.geo);
+        DirectX::XMStoreFloat3(&P, pv);
+    }
+
+    // AABB XV
     bounds_.WrapBox(P);
 
-    // –@ü
+    // @
     XMFLOAT3 N(0.0f, 1.0f, 0.0f);
     if (mesh->vertex_normal.exists) {
         uint32_t ni2 = UfbxUtil::ValueIndexOf(mesh->vertex_normal, corner, vtx);
@@ -179,9 +190,16 @@ void FbxMesh::EmitCorner(
             N.y = (float)(n.y * inv);
             N.z = (float)(n.z * inv);
         }
+        // ãƒãƒ¼ãƒ‰ transform ã‚’æ³•ç·šã«ã‚‚åæ˜ ï¼ˆå¹³è¡Œç§»å‹•ã¯ç„¡è¦–ï¼‰
+        if (ctx.mesh) {
+            DirectX::XMVECTOR nv = UfbxUtil::TransformNormal(N, ctx.geo);
+            nv = DirectX::XMVector3Normalize(nv);
+            DirectX::XMStoreFloat3(&N, nv);
+        }
+
     }
 
-    // UViV ‚¾‚¯”½“]j
+    // UViV ]j
     XMFLOAT2 T(0.0f, 0.0f);
     if (ctx.uvv && ctx.uvv->exists) {
         uint32_t ti = UfbxUtil::ValueIndexOf(*ctx.uvv, corner, vtx);
@@ -227,7 +245,7 @@ bool FbxMesh::BuildFromScene(const ufbx_scene* scene,
         return false;
     }
 
-    // “WŠJ‚Ég‚Á‚½ƒtƒ‰ƒbƒg’¸“_‚Í”jŠüiƒoƒCƒ“ƒh^ƒXƒLƒ“’¸“_‚Íc‚·j
+    // WJÉgtbg_Í”jioCh^XL_Ícj
     mesh_.vertices_.clear();
     mesh_.vertices_.shrink_to_fit();
 
@@ -235,8 +253,8 @@ bool FbxMesh::BuildFromScene(const ufbx_scene* scene,
 }
 
 //================================================================
-// BuildFromNodeinode->mesh 1ŒÂ‚¾‚¯“WŠJ‚µ‚Ä\’zj
-//   š•ÏX“_: ƒ}ƒ‹ƒ`ƒƒbƒVƒ…FBX‘Î‰‚Ì‚½‚ß’Ç‰Á
+// BuildFromNodeinode->mesh 1Â‚WJÄ\zj
+//   ÏX_: }`bVFBXÎ‰Ì‚ß’Ç‰
 //================================================================
 bool FbxMesh::BuildFromNode(const ufbx_scene* scene,
     const ufbx_node* node,
@@ -255,7 +273,7 @@ bool FbxMesh::BuildFromNode(const ufbx_scene* scene,
         return false;
     }
 
-    // “WŠJ‚Ég‚Á‚½ƒtƒ‰ƒbƒg’¸“_‚Í”jŠüiƒoƒCƒ“ƒh^ƒXƒLƒ“’¸“_‚Íc‚·j
+    // WJÉgtbg_Í”jioCh^XL_Ícj
     mesh_.vertices_.clear();
     mesh_.vertices_.shrink_to_fit();
 
@@ -263,8 +281,8 @@ bool FbxMesh::BuildFromNode(const ufbx_scene* scene,
 }
 
 //================================================================
-// ExpandNodeiCPUj: node 1ŒÂ•ª‚¾‚¯’¸“_“WŠJ
-//   š•ÏX“_: ExpandAllNodes ‚ğu1ƒm[ƒh”Åv‚É•ªŠ„
+// ExpandNodeiCPUj: node 1Â•_WJ
+//   ÏX_: ExpandAllNodes u1m[hÅvÉ•
 //================================================================
 void FbxMesh::ExpandNode(const ufbx_scene* scene,
     const ufbx_node* node,
@@ -272,7 +290,7 @@ void FbxMesh::ExpandNode(const ufbx_scene* scene,
 {
     using namespace DirectX;
 
-    // ‚¢‚Á‚½‚ñ‘S•”ƒNƒŠƒA
+    // SNA
     mesh_.vertices_.clear();
     mesh_.indices_.clear();
     mesh_.parts_.clear();
@@ -280,10 +298,10 @@ void FbxMesh::ExpandNode(const ufbx_scene* scene,
     mesh_.bind_vertices_.clear();
     mesh_.skinned_vertices_.clear();
 
-    // ƒoƒEƒ“ƒfƒBƒ“ƒOƒ{ƒbƒNƒX‰Šú‰»
+    // oEfBO{bNX
     bounds_.Reset();
 
-    // Skeleton “à‚Ìƒ{[ƒ“ƒ}ƒbƒv
+    // Skeleton Ìƒ{[}bv
     const auto& bone_index_map = skeleton.Data().bone_index_of_;
 
     has_skinning_ = false;
@@ -295,11 +313,11 @@ void FbxMesh::ExpandNode(const ufbx_scene* scene,
         has_skinning_ = true;
     }
 
-    // ’¸“_‚²‚Æ‚ÌƒXƒLƒ“î•ñ
+    // _Æ‚ÌƒXL
     std::vector<VertexInfluence> infl_per_vtx;
     BuildInfluencesForMesh(mesh, bone_index_map, infl_per_vtx);
 
-    // Šî–{ UV ƒZƒbƒgi‚Æ‚è‚ ‚¦‚¸ 1 ‚Âj
+    // { UV ZbgiÆ‚è‚  1 Âj
     const ufbx_vertex_vec2* base_uv = nullptr;
     if (mesh->vertex_uv.exists) {
         base_uv = &mesh->vertex_uv;
@@ -310,7 +328,7 @@ void FbxMesh::ExpandNode(const ufbx_scene* scene,
         base_uv = &mesh->uv_sets.data[0].vertex_uv;
     }
 
-    // ƒtƒFƒCƒX‚ğƒ}ƒeƒŠƒAƒ‹‚²‚Æ‚ÉƒOƒ‹[ƒv•ª‚¯
+    // tFCX}eAÆ‚ÉƒO[v
     std::unordered_map<uint32_t, std::vector<uint32_t>> faces_by_mat;
     for (uint32_t fi = 0; fi < (uint32_t)mesh->faces.count; ++fi) {
         uint32_t mi =
@@ -319,7 +337,7 @@ void FbxMesh::ExpandNode(const ufbx_scene* scene,
         faces_by_mat[mi].push_back(fi);
     }
 
-    // Šeƒ}ƒeƒŠƒAƒ‹‚²‚Æ‚É MeshPart ‚ğì‚Á‚Ä’¸“_“WŠJ
+    // e}eAÆ‚ MeshPart Ä’_WJ
     for (auto& kv : faces_by_mat) {
         uint32_t                     mat_index = kv.first;
         const std::vector<uint32_t>& face_list = kv.second;
@@ -328,7 +346,7 @@ void FbxMesh::ExpandNode(const ufbx_scene* scene,
         part.mat = nullptr;
         part.start_index = (uint32_t)mesh_.indices_.size();
 
-        // ³‚µ‚¢ƒ}ƒeƒŠƒAƒ‹‚ğ node / mesh ‚©‚ç’T‚·
+        // }eA node / mesh T
         {
             const ufbx_material* mat = nullptr;
             if (node && node->materials.count > mat_index &&
@@ -342,22 +360,32 @@ void FbxMesh::ExpandNode(const ufbx_scene* scene,
             part.mat = mat;
         }
 
-        // UV ƒZƒbƒg‚ğƒeƒNƒXƒ`ƒƒ‚É‡‚í‚¹‚Ä‘I‚Ñ’¼‚·
+        // UV ZbgeNX`Éí‚¹Ä‘IÑ’
         const ufbx_vertex_vec2* uvv =
             ChooseUVSet(mesh, part.mat, base_uv);
 
-        // ‚±‚Ìƒ}ƒeƒŠƒAƒ‹‚Åg‚¤ƒRƒ“ƒeƒLƒXƒg‚ğ€”õ
+        // Ìƒ}eAÅgReLXg
         BuildContext ctx;
         ctx.mesh = mesh;
         ctx.uvv = uvv;
         ctx.infl_per_vtx = &infl_per_vtx;
 
-        // “o˜^‚³‚ê‚½ƒtƒFƒCƒX‚ğ‘S‚ÄOŠpŒ`‚É•ª‰ğ‚µ‚Ä’¸“_¶¬
+        {
+            DirectX::XMFLOAT4X4 m = UfbxUtil::ToXMMatrix(node->geometry_to_world);
+            ctx.geo = DirectX::XMLoadFloat4x4(&m);
+        }
+
+        {
+            DirectX::XMFLOAT4X4 m = UfbxUtil::ToXMMatrix(node->geometry_to_world);
+            ctx.geo = DirectX::XMLoadFloat4x4(&m);
+        }
+
+        // o^ê‚½tFCXSÄOp`É•Ä’_
         for (uint32_t f_index : face_list) {
             const ufbx_face f = mesh->faces.data[f_index];
             if (f.num_indices < 3) continue;
 
-            // nŠpŒ`‚ğuîŒ`•ªŠ„v‚ÅOŠpŒ`‚É‚·‚é
+            // np`u`vÅOp`É‚
             for (uint32_t k = 0; k + 2 < f.num_indices; ++k) {
                 uint32_t corners[3] = {
                     f.index_begin + 0,
@@ -374,7 +402,7 @@ void FbxMesh::ExpandNode(const ufbx_scene* scene,
             }
         }
 
-        // ‚±‚Ì MeshPart ‚ªg‚¤ƒCƒ“ƒfƒbƒNƒX”‚ğ‹L˜^
+        //  MeshPart gCfbNXL^
         part.index_count =
             (uint32_t)mesh_.indices_.size() - part.start_index;
         if (part.index_count > 0) {
@@ -382,23 +410,23 @@ void FbxMesh::ExpandNode(const ufbx_scene* scene,
         }
     }
 
-    // šAABB ‚©‚ç‹…‚ğXV
+    // AABB ç‹…XV
     bounds_.RecalcSphereFromAABB();
 
-    // ƒoƒCƒ“ƒhƒ|[ƒY’¸“_EƒXƒLƒjƒ“ƒOŒ‹‰Ê’¸“_‚ğ€”õ
+    // oCh|[Y_EXLjOÊ’_
     mesh_.bind_vertices_ = mesh_.vertices_;
     mesh_.skinned_vertices_ = mesh_.vertices_;
 }
 
 //================================================================
-// ƒƒbƒVƒ…“WŠJiCPUj
+// bVWJiCPUj
 //================================================================
 void FbxMesh::ExpandAllNodes(const ufbx_scene* scene,
     FbxSkeleton& skeleton)
 {
     using namespace DirectX;
 
-    // ‚¢‚Á‚½‚ñ‘S•”ƒNƒŠƒA
+    // SNA
     mesh_.vertices_.clear();
     mesh_.indices_.clear();
     mesh_.parts_.clear();
@@ -406,14 +434,14 @@ void FbxMesh::ExpandAllNodes(const ufbx_scene* scene,
     mesh_.bind_vertices_.clear();
     mesh_.skinned_vertices_.clear();
 
-    // ƒoƒEƒ“ƒfƒBƒ“ƒOƒ{ƒbƒNƒX‰Šú‰»
+    // oEfBO{bNX
     bounds_.Reset();
 
-    // Skeleton “à‚Ìƒ{[ƒ“ƒ}ƒbƒv
+    // Skeleton Ìƒ{[}bv
     const auto& bone_index_map = skeleton.Data().bone_index_of_;
 
     has_skinning_ = false;
-    // ƒV[ƒ“’†‚Ì‘Sƒm[ƒh‚ğƒ`ƒFƒbƒN
+    // V[Ì‘Sm[h`FbN
     for (size_t ni = 0; ni < scene->nodes.count; ++ni) {
         const ufbx_node* node = scene->nodes.data[ni];
         const ufbx_mesh* mesh = node->mesh;
@@ -423,11 +451,11 @@ void FbxMesh::ExpandAllNodes(const ufbx_scene* scene,
             has_skinning_ = true;
         }
 
-        // ’¸“_‚²‚Æ‚ÌƒXƒLƒ“î•ñ
+        // _Æ‚ÌƒXL
         std::vector<VertexInfluence> infl_per_vtx;
         BuildInfluencesForMesh(mesh, bone_index_map, infl_per_vtx);
 
-        // Šî–{ UV ƒZƒbƒgi‚Æ‚è‚ ‚¦‚¸ 1 ‚Âj
+        // { UV ZbgiÆ‚è‚  1 Âj
         const ufbx_vertex_vec2* base_uv = nullptr;
         if (mesh->vertex_uv.exists) {
             base_uv = &mesh->vertex_uv;
@@ -438,7 +466,7 @@ void FbxMesh::ExpandAllNodes(const ufbx_scene* scene,
             base_uv = &mesh->uv_sets.data[0].vertex_uv;
         }
 
-        // ƒtƒFƒCƒX‚ğƒ}ƒeƒŠƒAƒ‹‚²‚Æ‚ÉƒOƒ‹[ƒv•ª‚¯
+        // tFCX}eAÆ‚ÉƒO[v
         std::unordered_map<uint32_t, std::vector<uint32_t>> faces_by_mat;
         for (uint32_t fi = 0; fi < (uint32_t)mesh->faces.count; ++fi) {
             uint32_t mi =
@@ -447,7 +475,7 @@ void FbxMesh::ExpandAllNodes(const ufbx_scene* scene,
             faces_by_mat[mi].push_back(fi);
         }
 
-        // Šeƒ}ƒeƒŠƒAƒ‹‚²‚Æ‚É MeshPart ‚ğì‚Á‚Ä’¸“_“WŠJ
+        // e}eAÆ‚ MeshPart Ä’_WJ
         for (auto& kv : faces_by_mat) {
             uint32_t                     mat_index = kv.first;
             const std::vector<uint32_t>& face_list = kv.second;
@@ -456,7 +484,7 @@ void FbxMesh::ExpandAllNodes(const ufbx_scene* scene,
             part.mat = nullptr;
             part.start_index = (uint32_t)mesh_.indices_.size();
 
-            // ³‚µ‚¢ƒ}ƒeƒŠƒAƒ‹‚ğ node / mesh ‚©‚ç’T‚·
+            // }eA node / mesh T
             {
                 const ufbx_material* mat = nullptr;
                 if (node && node->materials.count > mat_index &&
@@ -470,22 +498,22 @@ void FbxMesh::ExpandAllNodes(const ufbx_scene* scene,
                 part.mat = mat;
             }
 
-            // UV ƒZƒbƒg‚ğƒeƒNƒXƒ`ƒƒ‚É‡‚í‚¹‚Ä‘I‚Ñ’¼‚·
+            // UV ZbgeNX`Éí‚¹Ä‘IÑ’
             const ufbx_vertex_vec2* uvv =
                 ChooseUVSet(mesh, part.mat, base_uv);
 
-            // ‚±‚Ìƒ}ƒeƒŠƒAƒ‹‚Åg‚¤ƒRƒ“ƒeƒLƒXƒg‚ğ€”õ
+            // Ìƒ}eAÅgReLXg
             BuildContext ctx;
             ctx.mesh = mesh;
             ctx.uvv = uvv;
             ctx.infl_per_vtx = &infl_per_vtx;
 
-            // “o˜^‚³‚ê‚½ƒtƒFƒCƒX‚ğ‘S‚ÄOŠpŒ`‚É•ª‰ğ‚µ‚Ä’¸“_¶¬
+            // o^ê‚½tFCXSÄOp`É•Ä’_
             for (uint32_t f_index : face_list) {
                 const ufbx_face f = mesh->faces.data[f_index];
                 if (f.num_indices < 3) continue;
 
-                // nŠpŒ`‚ğuîŒ`•ªŠ„v‚ÅOŠpŒ`‚É‚·‚é
+                // np`u`vÅOp`É‚
                 for (uint32_t k = 0; k + 2 < f.num_indices; ++k) {
                     uint32_t corners[3] = {
                         f.index_begin + 0,
@@ -502,7 +530,7 @@ void FbxMesh::ExpandAllNodes(const ufbx_scene* scene,
                 }
             }
 
-            // ‚±‚Ì MeshPart ‚ªg‚¤ƒCƒ“ƒfƒbƒNƒX”‚ğ‹L˜^
+            //  MeshPart gCfbNXL^
             part.index_count =
                 (uint32_t)mesh_.indices_.size() - part.start_index;
             if (part.index_count > 0) {
@@ -511,19 +539,19 @@ void FbxMesh::ExpandAllNodes(const ufbx_scene* scene,
         }
     }
 
-    // šAABB ‚©‚ç‹…‚ğXV
+    // AABB ç‹…XV
     bounds_.RecalcSphereFromAABB();
 
-    // ƒXƒPƒ‹ƒgƒ“‘¤‚ÉƒV[ƒ“”¼Œa‚ğ‘‚«‚Şiƒ{[ƒ“•\¦‚Åg—pj
+    // XPgÉƒV[aŞi{[\Ågpj
     skeleton.Data().scene_radius_ = bounds_.radius;
 
-    // ƒoƒCƒ“ƒhƒ|[ƒY’¸“_EƒXƒLƒjƒ“ƒOŒ‹‰Ê’¸“_‚ğ€”õ
+    // oCh|[Y_EXLjOÊ’_
     mesh_.bind_vertices_ = mesh_.vertices_;
     mesh_.skinned_vertices_ = mesh_.vertices_;
 }
 
 //================================================================
-// GPU ƒoƒbƒtƒ@ì¬
+// GPU obt@ì¬
 //================================================================
 bool FbxMesh::CreateGpuBuffers()
 {
@@ -532,7 +560,7 @@ bool FbxMesh::CreateGpuBuffers()
     ID3D11Device* device = Gfx::Dev();
     if (!device) return false;
 
-    // VB ì¬
+    // VB ì¬
     {
         D3D11_BUFFER_DESC desc;
         std::memset(&desc, 0, sizeof(desc));
@@ -552,7 +580,7 @@ bool FbxMesh::CreateGpuBuffers()
         }
     }
 
-    // IB ì¬
+    // IB ì¬
     {
         D3D11_BUFFER_DESC desc;
         std::memset(&desc, 0, sizeof(desc));
@@ -576,7 +604,7 @@ bool FbxMesh::CreateGpuBuffers()
 }
 
 //================================================================
-// ƒGƒtƒFƒNƒg•ƒeƒNƒXƒ`ƒƒì¬
+// GtFNgeNX`ì¬
 //================================================================
 bool FbxMesh::CreateEffectsAndTextures(
     const char* fbx_path,
@@ -589,7 +617,7 @@ bool FbxMesh::CreateEffectsAndTextures(
     ID3D11DeviceContext* ctx = Gfx::Ctx();
     if (!device || !ctx) return false;
 
-    // CommonStates / BasicEffect ‚ÌŠm•Û
+    // CommonStates / BasicEffect ÌŠm
     if (!states_) {
         states_.reset(new DirectX::DX11::CommonStates(device));
     }
@@ -599,7 +627,7 @@ bool FbxMesh::CreateEffectsAndTextures(
 
     DirectX::BasicEffect* fx = fx_.get();
 
-    // ŠÈ’P‚Èƒ‰ƒCƒeƒBƒ“ƒOİ’è
+    // È’PÈƒCeBOİ’
     fx->SetLightingEnabled(true);
     fx->SetPerPixelLighting(true);
     fx->SetVertexColorEnabled(false);
@@ -610,7 +638,7 @@ bool FbxMesh::CreateEffectsAndTextures(
     fx->SetLightDirection(0, { -0.5f, -1.0f, 0.3f });
     fx->SetLightDiffuseColor(0, { 1.0f, 1.0f, 1.0f, 1.0f });
 
-    // “ü—ÍƒŒƒCƒAƒEƒg
+    // ÍƒCAEg
     if (!layout_) {
         const void* bc = nullptr;
         size_t      sz = 0;
@@ -633,14 +661,14 @@ bool FbxMesh::CreateEffectsAndTextures(
         }
     }
 
-    // FBX ƒtƒ@ƒCƒ‹‚ÌƒfƒBƒŒƒNƒgƒŠ
+    // FBX t@CÌƒfBNg
     fs::path fbx_dir;
     if (fbx_path) {
         size_t len = std::strlen(fbx_path);
         fbx_dir = UfbxUtil::PathFromUtf8(fbx_path, len).parent_path();
     }
 
-    // Še MeshPart ‚ÌƒeƒNƒXƒ`ƒƒ‚ğì¬
+    // e MeshPart ÌƒeNX`ì¬
     for (size_t i = 0; i < mesh_.parts_.size(); ++i) {
         MeshPart& part = mesh_.parts_[i];
 
@@ -649,7 +677,7 @@ bool FbxMesh::CreateEffectsAndTextures(
 
         HRESULT hr = E_FAIL;
 
-        // FBX “à–„‚ß‚İ
+        // FBX ß
         if (tex->content.size > 0 && tex->content.data) {
             hr = DirectX::CreateWICTextureFromMemory(
                 device,
@@ -659,7 +687,7 @@ bool FbxMesh::CreateEffectsAndTextures(
                 nullptr,
                 part.srv.ReleaseAndGetAddressOf());
         }
-        // ŠO•”ƒtƒ@ƒCƒ‹
+        // Ot@C
         else if (tex->filename.length > 0 && tex->filename.data) {
             fs::path tex_path = fbx_dir / UfbxUtil::FileNameFromUfbx(tex->filename);
             if (fs::exists(tex_path)) {
@@ -741,7 +769,7 @@ void FbxMesh::ApplySkinCPU(
 }
 
 //================================================================
-// ƒƒbƒVƒ…•`‰æ
+// bV`
 //================================================================
 void FbxMesh::Draw(
     const DirectX::XMMATRIX& world,

@@ -1,6 +1,7 @@
 #pragma once
 #include "Engine/Scene.h"
 
+class ModelComponent;
 
 class TestScene :
     public Scene
@@ -16,5 +17,6 @@ public:
 
 private:
 	GameObject* actor_ = nullptr;
+    ModelComponent* mc_;
 };
 

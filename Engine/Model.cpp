@@ -1,11 +1,13 @@
 ﻿#include "Model.h"
 #include "FbxModel.h"
 #include "Camera.h"
+#include "Input.h"
 
 #include <vector>
 #include <string>
 #include "EngineTime.h"  // ★追加
 #include <unordered_map>
+#include <Windows.h>
 
 using namespace DirectX;
 
@@ -65,12 +67,7 @@ namespace
 
     bool IsValidHandle(int handle)
     {
-        //return handle >= 0
-        //    && handle < static_cast<int>(g_models.size())
-        //    && g_models[handle].inUse
-        //    && g_models[handle].pFbx != nullptr;
         return handle >= 0 && handle < (int)g_models.size() && g_models[handle].inUse;
-
     }
 
     // 共有モデルの参照カウントを減らし、0 になったら削除
@@ -106,6 +103,9 @@ namespace
 //====================================
 namespace Model
 {
+    // Step4: sub-mesh solo draw (-1: all, 0..N-1: solo)
+    static int s_debug_draw_mesh_index = -1;
+
     void Initialize()
     {
         // すべてのハンドルから参照を外しつつ、
@@ -193,16 +193,12 @@ namespace Model
         }
 
         // FbxModel から「高さ（Y サイズ）」を取得
-        //float srcHeight = md.pFbx->MeasureSize(SizeMeasureAxis::HeightY);
         float srcHeight = md.pFbx->MeasureSkinnedHeightY();
         if (fileName.find("TriAvater") != std::string::npos) {
             OutputDebugStringA(
                 (std::string("TriAvater: srcHeight = ")
                     + std::to_string(srcHeight) + "\n").c_str());
         }
-
-
-
 
         const float EPS = 1e-5f;
         if (srcHeight < EPS || targetHeight <= 0.0f)
@@ -216,21 +212,9 @@ namespace Model
             md.uniformScale = targetHeight / srcHeight;
         }
 
-        // ★ ここを一時的に入れて、TriAvatar の実際の値を確認する
-        //if (fileName.find("TriAvater") != std::string::npos) {
-        //    float worldHeight = srcHeight * md.uniformScale;  // Transform の scale が 1 前提
-
-        //    char buf[256];
-        //    sprintf_s(buf,
-        //        "TriAvater: srcHeight = %.3f, targetHeight = %.3f, uniformScale = %.6f, worldHeight = %.3f\n",
-        //        srcHeight, targetHeight, md.uniformScale, worldHeight);
-        //    OutputDebugStringA(buf);
-        //}
-
-
         return handle;
     }
-    
+
 
     void Draw(int handle)
     {
@@ -240,16 +224,40 @@ namespace Model
         auto& md = g_models[handle];
         if (!md.pFbx) return;
 
-        // ★ デバッグログ追加
- /*       {
-            char buf[256];
-            sprintf_s(buf,
-                "[Draw] h=%d  uniformScale=%.6f  HeightY=%.6f\n",
-                handle,
-                md.uniformScale,
-                md.pFbx->MeasureSize(SizeMeasureAxis::HeightY));
-            OutputDebugStringA(buf);
-        }*/
+        // --------------------------------------------------------
+        // Step4: sub-mesh solo draw (visual verification)
+        //   F9 : toggle solo draw (all <-> 0)
+        //   F10: next sub-mesh (when solo draw enabled)
+        // --------------------------------------------------------
+        {
+            const int meshCount = (int)md.pFbx->MeshGroup().MeshCount();
+
+            if (Input::IsKeyDown(VK_F9))
+            {
+                s_debug_draw_mesh_index = (s_debug_draw_mesh_index < 0) ? 0 : -1;
+
+                char buf[256];
+                sprintf_s(buf, "[Step4] DebugDrawMeshIndex=%d (meshCount=%d)\n",
+                    s_debug_draw_mesh_index, meshCount);
+                OutputDebugStringA(buf);
+            }
+
+            if (Input::IsKeyDown(VK_F10))
+            {
+                if (meshCount > 0)
+                {
+                    if (s_debug_draw_mesh_index < 0) s_debug_draw_mesh_index = 0;
+                    else s_debug_draw_mesh_index = (s_debug_draw_mesh_index + 1) % meshCount;
+
+                    char buf[256];
+                    sprintf_s(buf, "[Step4] DebugDrawMeshIndex=%d (meshCount=%d)\n",
+                        s_debug_draw_mesh_index, meshCount);
+                    OutputDebugStringA(buf);
+                }
+            }
+
+            md.pFbx->SetDebugDrawMeshIndex(s_debug_draw_mesh_index);
+        }
 
         const ufbx_scene* scene = md.pFbx ? md.pFbx->Scene() : nullptr;
 
@@ -276,7 +284,7 @@ namespace Model
 
         if (anim && hasAnimSetting)
         {
-            if (!md.anim.paused){
+            if (!md.anim.paused) {
                 // ★ここだけ「時間ベース」に変える
                 const double dtSec = EngineTime::DeltaTime();      // 秒
                 const double framesPerSec = ANIM_FPS;                // 60fps 基準
@@ -361,7 +369,6 @@ namespace Model
             world = s * world;
         }
 
-
         DirectX::XMMATRIX view = Camera::GetViewMatrix();
         DirectX::XMMATRIX proj = Camera::GetProjectionMatrix();
 
@@ -393,8 +400,6 @@ namespace Model
             world = s * world;
         }
 
-
-
         // カメラからビュー・プロジェクションを取得
         XMMATRIX view = Camera::GetViewMatrix();
         XMMATRIX proj = Camera::GetProjectionMatrix();
@@ -402,9 +407,6 @@ namespace Model
         // FbxModel 側のスケルトン描画
         md.pFbx->DrawSkeleton(world, view, proj);
     }
-
-
-
 
     void Release(int handle)
     {
