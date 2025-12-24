@@ -24,16 +24,16 @@ void TestScene::Initialize()
     Camera::SetTarget({ 0.0, 0.0, 0.0 });
 
     actor_ = new GameObject(&Root(), "Actor");
-    //auto mc = new ModelComponent(actor_, "Assets/Barbarian.fbx", 1.0f);
+    mc_ = new ModelComponent(actor_, "Assets/Barbarian.fbx", 1.0f);
     //auto mc = new ModelComponent(actor_, "Assets/SillyDancing.fbx", 1.0f);
-    mc_ = new ModelComponent(actor_, "Assets/abc.fbx", 1.0f);
+    //mc_ = new ModelComponent(actor_, "Assets/abc.fbx", 1.0f);
 
     // モデル（必要に応じてパス・正規化高さを調整）
     actor_->AddComponent(mc_);
 
     // 初期位置
     actor_->GetTransform().position_ = { 0.0f, 0.0f, 0.0f };
-    mc_->SetAnimStack(1);
+    mc_->SetAnimStack(0);
     mc_->SetAnimRange(0, 229, 1.0f);
     mc_->SetLoop(true);
 
@@ -78,9 +78,9 @@ void TestScene::Update()
 
     if(Input::IsKeyDown(VK_SPACE))
     {
-        int acount = mc_->GetAnimStackCount();
-        static int animNum = 0;
-        mc_->SetAnimStack((animNum++) % acount);
+        //int acount = mc_->GetAnimStackCount();
+        //static int animNum = 0;
+        //mc_->SetAnimStack((animNum++) % acount);
         
 	}
 	static bool isPlayBGM = false;
