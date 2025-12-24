@@ -21,7 +21,8 @@ TestScene::~TestScene()
 void TestScene::Initialize()
 {
     actor_ = new GameObject(&Root(), "Actor");
-    auto mc = new ModelComponent(actor_, "Assets/SillyDancing.fbx", 1.0f);
+    auto mc = new ModelComponent(actor_, "Assets/Barbarian.fbx", 1.0f);
+    //auto mc = new ModelComponent(actor_, "Assets/SillyDancing.fbx", 1.0f);
 
     // モデル（必要に応じてパス・正規化高さを調整）
     actor_->AddComponent(mc);

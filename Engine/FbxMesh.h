@@ -1,41 +1,29 @@
+// FbxMesh.h
 #pragma once
-#include <vector>
-#include <cstdint>
+
 #include <memory>
-#include <unordered_map>
+#include <vector>
+#include <string>
+#include <cstdint>
 
 #include <d3d11.h>
-#include <wrl/client.h>
 #include <DirectXMath.h>
+#include <wrl/client.h>
+
 #include <CommonStates.h>
 #include <Effects.h>
+
 #include "BoundingVolume.h"
+#include "FbxSkeleton.h"
+#include "ufbx.h"
 
-using namespace DirectX;
 
-struct ufbx_scene;
-struct ufbx_node;
-struct ufbx_material;
-struct ufbx_texture;
-
-class FbxSkeleton;
-
-namespace DirectX
-{
-    namespace DX11 {
-        class BasicEffect;
-        class CommonStates;
-    }
-}
-
-struct BuildContext;
-
+//======================================================================
+// FbxMesh
+//======================================================================
 class FbxMesh
 {
 public:
-    // ------------------------------------------------------------
-    // 頂点構造体 (Position / Normal / Texcoord)
-    // ------------------------------------------------------------
     struct VertexPNT2
     {
         DirectX::XMFLOAT3 pos;
@@ -43,101 +31,98 @@ public:
         DirectX::XMFLOAT2 uv;
     };
 
-    // ------------------------------------------------------------
-    // ボーンインフルエンス (最大4本)
-    // ------------------------------------------------------------
     struct VertexInfluence
     {
-        uint16_t bone[4];
-        float    weight[4];
-
-        VertexInfluence()
-        {
-            for (int i = 0; i < 4; ++i) {
-                bone[i] = 0;
-                weight[i] = 0.0f;
-            }
-        }
+        uint16_t bone[4]{};
+        float    weight[4]{};
     };
 
-    // ------------------------------------------------------------
-    // メッシュの一部分 (マテリアル1つ分)
-    // ------------------------------------------------------------
     struct MeshPart
     {
         const ufbx_material* mat = nullptr;
         uint32_t             start_index = 0;
         uint32_t             index_count = 0;
-
         Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> srv;
     };
 
-    // ------------------------------------------------------------
-    // メッシュの CPU 側データ
-    // ------------------------------------------------------------
     struct MeshData
     {
-        std::vector<VertexPNT2>      vertices_;         // ロード時のフラット頂点
-        std::vector<uint32_t>        indices_;          // インデックス
-        std::vector<MeshPart>        parts_;            // マテリアル毎のパート
+        std::vector<VertexPNT2>        vertices_;
+        std::vector<uint32_t>         indices_;
+        std::vector<MeshPart>         parts_;
 
-        std::vector<VertexInfluence> influences_;       // 頂点ごとのボーン影響
-        std::vector<VertexPNT2>      bind_vertices_;    // バインドポーズ頂点
-        std::vector<VertexPNT2>      skinned_vertices_; // スキニング後頂点
+        std::vector<VertexInfluence>  influences_;
+        std::vector<VertexPNT2>       bind_vertices_;
+        std::vector<VertexPNT2>       skinned_vertices_;
     };
 
-
 public:
-    FbxMesh() = default;
+    FbxMesh();
+    ~FbxMesh();
 
-    const BVolume& GetBV() const { return bounds_; }
-    BVolume& GetBV() { return bounds_; }
-    // CPU メッシュ展開 + GPU バッファ + エフェクト/テクスチャ作成をまとめて行う
     bool BuildFromScene(const ufbx_scene* scene,
         FbxSkeleton& skeleton,
         const char* fbx_path);
 
-    // 描画 (必要なら CPU スキニングを行う)
-    void Draw(const DirectX::XMMATRIX& world,
+    // ------------------------------------------------------------
+    // node 1個（node->mesh 1個）だけ展開して構築（マルチメッシュ対応用）
+    // ★変更点: FbxMeshGroup から呼ぶ想定の新規API
+    // ------------------------------------------------------------
+    bool BuildFromNode(const ufbx_scene* scene,
+        const ufbx_node* node,
+        FbxSkeleton& skeleton,
+        const char* fbx_path);
+
+    void Draw(
+        const DirectX::XMMATRIX& world,
         const DirectX::XMMATRIX& view,
         const DirectX::XMMATRIX& proj,
         FbxSkeleton& skeleton);
 
+    void ApplySkinCPU(const std::vector<DirectX::XMMATRIX>& skin_mats);
+
+    void ApplyUniformScale(float s);
+
     // アクセサ
-    const MeshData& Data() const { return mesh_; }
     MeshData& Data() { return mesh_; }
-    void ApplySkinCPU(
-        const std::vector<DirectX::XMMATRIX>& skin_mats);
+    const MeshData& Data() const { return mesh_; }
+
+    BVolume& GetBV() { return bounds_; }
+    const BVolume& GetBV() const { return bounds_; }
+
+    bool HasSkinning() const { return has_skinning_; }
+
 private:
-    // 旧 ExpandAllNodes
-    void ExpandAllNodes(const ufbx_scene* scene,
-        FbxSkeleton& skeleton);
-
-    // 旧 CreateGpuBuffers
-    bool CreateGpuBuffers();
-
-    // 旧 CreateEffectsAndTextures
-    bool CreateEffectsAndTextures(const char* fbx_path,
-        const ufbx_scene* scene);
-
-    void EmitCorner(
-        BuildContext& ctx,
+    void EmitCorner(struct BuildContext& ctx,
         uint32_t corner,
         uint32_t vtx);
 
+    void ExpandAllNodes(const ufbx_scene* scene,
+        FbxSkeleton& skeleton);
 
+    // ------------------------------------------------------------
+    // node 1個だけ展開（BuildFromNode 用）
+    // ★変更点: マルチメッシュ対応のため追加
+    // ------------------------------------------------------------
+    void ExpandNode(const ufbx_scene* scene,
+        const ufbx_node* node,
+        FbxSkeleton& skeleton);
 
-    void ApplyUniformScale(float s);
+    bool CreateGpuBuffers();
+    bool CreateEffectsAndTextures(
+        const char* fbx_path,
+        const ufbx_scene* scene);
+
 private:
-    BVolume bounds_;
     MeshData mesh_;
 
-	bool has_skinning_ = false;
+    Microsoft::WRL::ComPtr<ID3D11Buffer> vb_;
+    Microsoft::WRL::ComPtr<ID3D11Buffer> ib_;
 
-    // 描画リソース (旧 draw_ 相当のメッシュ側だけ)
-    Microsoft::WRL::ComPtr<ID3D11Buffer>          vb_;
-    Microsoft::WRL::ComPtr<ID3D11Buffer>          ib_;
-    Microsoft::WRL::ComPtr<ID3D11InputLayout>     layout_;
-    std::unique_ptr<DirectX::BasicEffect>         fx_;
-    std::unique_ptr<DirectX::CommonStates>        states_;
+    std::unique_ptr<DirectX::DX11::CommonStates> states_;
+    std::unique_ptr<DirectX::DX11::BasicEffect>  fx_;
+    Microsoft::WRL::ComPtr<ID3D11InputLayout>    layout_;
+
+    BVolume bounds_;
+    bool    has_skinning_ = false;
 };

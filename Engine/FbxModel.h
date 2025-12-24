@@ -8,6 +8,7 @@
 #include "ufbx.h"
 #include "FbxSkeleton.h"
 #include "FbxMesh.h"
+#include "FbxMeshGroup.h"
 #include "BoundingVolume.h"
 
 
@@ -17,19 +18,19 @@ enum class SizeMeasureAxis
     WidthX,       // max.x - min.x
     DepthZ,       // max.z - min.z
     MaxExtent,    // max(x,y,z)
-    Radius,       // 従来互換（必要なら）
+    Radius,       // 球半径（必要なら）
 };
 
 
-// ufbx を前方宣言（ヘッダに直接依存しないようにする）
+// ufbx を前方宣言（ヘッダに直依存しないようにする）
 struct ufbx_scene;
 struct ufbx_anim;
 
 //======================================================================
 // FbxModel
 //   - ufbx_scene の所有
-//   - FbxSkeleton（ボーン・アニメーション）
-//   - FbxMesh（メッシュ・テクスチャ・描画）
+//   - FbxSkeleton（ボーン＆アニメーション）
+//   - FbxMesh（メッシュ＆テクスチャ＆描画）
 // をまとめて扱うクラス
 //======================================================================
 class FbxModel
@@ -42,7 +43,7 @@ public:
     // 読み込み・破棄
     // ------------------------------------------------------------
 
-    // FBX ファイルを読み込んで、スケルトン＋メッシュを構築
+    // FBX ファイルを読み込んで、スケルトン＆メッシュを構築
     bool Load(const char* fbx_path);
 
     // 明示的なリセット（再利用したい場合など）
@@ -84,30 +85,36 @@ public:
     FbxMesh& Mesh() { return mesh_; }
     const FbxMesh& Mesh()        const { return mesh_; }
 
-    // ★ BV アクセサ（Mesh にフォワード）
+    // BV アクセサ（Mesh にフォワード）
     BVolume& GetBV() { return mesh_.GetBV(); }
     const BVolume& GetBV() const { return mesh_.GetBV(); }
 
-    // ★ シーン半径アクセサ（Skeleton にフォワード）
+    // シーン半径アクセサ（Skeleton にフォワード）
     float SceneRadius();
-    float SceneHeight();   // ★ 追加：Y 高さ（maxY - minY）
+    float SceneHeight();   // 追加：Y 高さ（maxY - minY）
     float MeasureSize(SizeMeasureAxis axis);
     float MeasureSkinnedHeightY();
+
+    // ------------------------------------------------------------
+    // Step1: 組み込み準備（まだ未使用）
+    // ------------------------------------------------------------
+    FbxMeshGroup& MeshGroup() { return mesh_group_; }
+    const FbxMeshGroup& MeshGroup() const { return mesh_group_; }
 
 private:
     // シーン読み込みの下請け
     bool LoadScene(const char* fbx_path);
-    
+
 private:
     // ufbx シーン本体（FbxSkeleton / FbxMesh はこれを参照して構築する）
     std::unique_ptr<ufbx_scene, void(*)(ufbx_scene*)> scene_{ nullptr, ufbx_free_scene };
 
-    // ボーン・アニメーション情報
+    // ボーン＆アニメーション情報
     FbxSkeleton skeleton_;
 
-    // メッシュ＋テクスチャ＋描画情報
+    // メッシュ＋テクスチャ＋描画情報（単一互換の既存経路）
     FbxMesh     mesh_;
 
-
+    // 複数ノード/複数メッシュ用（Step1では保持のみ。動作は変えない）
+    FbxMeshGroup mesh_group_;
 };
-
