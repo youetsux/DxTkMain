@@ -21,21 +21,44 @@ TestScene::~TestScene()
 void TestScene::Initialize()
 {
     Camera::SetPosition({ 0.0f, 1.0f, -2.0f });
-    Camera::SetTarget({ 0.0, 0.0, 0.0 });
+    Camera::SetTarget({ 0.0, 1.0, 0.0 });
 
     actor_ = new GameObject(&Root(), "Actor");
-    mc_ = new ModelComponent(actor_, "Assets/Barbarian.fbx", 1.0f);
+    auto mc = new ModelComponent(actor_, "Assets/SillyDancing.fbx", 1.0f);
+    //mc2_ = new ModelComponent(actor_, "Assets/SillyDancing.fbx", 1.0f);
     //auto mc = new ModelComponent(actor_, "Assets/SillyDancing.fbx", 1.0f);
     //mc_ = new ModelComponent(actor_, "Assets/abc.fbx", 1.0f);
 
     // モデル（必要に応じてパス・正規化高さを調整）
-    actor_->AddComponent(mc_);
+    actor_->AddComponent(mc);
+    //actor_->AddComponent(mc2_);
 
-    // 初期位置
+    // 初期位置 mc_
     actor_->GetTransform().position_ = { 0.0f, 0.0f, 0.0f };
-    mc_->SetAnimStack(0);
-    mc_->SetAnimRange(0, 229, 1.0f);
-    mc_->SetLoop(true);
+    mc->SetAnimStack(0);
+    mc->SetAnimRange(0, 229, 1.0f);
+    mc->SetLoop(true);
+
+    //2体目
+    actor2_ = new GameObject(&Root(), "Actor2");
+    auto mc2 = new ModelComponent(actor2_, "Assets/TriAvater.fbx", 1.0);
+    //mc2_ = new ModelComponent(actor_, "Assets/SillyDancing.fbx", 1.0f);
+    //auto mc = new ModelComponent(actor_, "Assets/SillyDancing.fbx", 1.0f);
+    //mc_ = new ModelComponent(actor_, "Assets/abc.fbx", 1.0f);
+
+    // モデル（必要に応じてパス・正規化高さを調整）
+    actor_->AddComponent(mc2);
+    //actor_->AddComponent(mc2_);
+
+    // 初期位置 mc_
+    actor2_->GetTransform().position_ = { 1.0f, 0.0f, 0.0f };
+    actor2_->GetTransform().rotate_ = { -90.0f, 0.0f, 0.0f };
+    actor2_->GetTransform().scale_ = { 0.00005f, 0.00005f, 0.00005f };
+    mc2->SetAnimStack(1);
+    mc2->SetAnimRange(0, 229, 1.0f);
+    mc2->SetLoop(true);
+
+
 
 }
 
