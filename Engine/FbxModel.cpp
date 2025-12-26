@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <new> // placement new
 
+
 //------------------------------------------------------------
 // Step3 ύX_
 // - Draw() 𕪊F
@@ -125,6 +126,7 @@ bool FbxModel::LoadScene(const char* fbx_path)
     opts.handedness_conversion_axis = UFBX_MIRROR_AXIS_Z;
 
     ufbx_scene* raw_scene = ufbx_load_file(fbx_path, &opts, &err);
+    
     if (!raw_scene) {
         return false;
     }

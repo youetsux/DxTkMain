@@ -320,28 +320,160 @@ namespace Model
 
     int Load(const std::string& fileName, float targetHeight)
     {
+        // まずは通常版 Load でモデルを読み込む
         int handle = Load(fileName);
         if (handle < 0) return handle;
         if (!IsValidHandle(handle)) return handle;
 
-        auto& md = g_models[handle];
+        ModelData& md = g_models[handle];
         if (!md.pFbx)
         {
             md.uniformScale = 1.0f;
             return handle;
         }
 
-        float srcHeight = md.pFbx->MeasureSkinnedHeightY();
+        // targetHeight <= 0 の場合は正規化しない
+        if (targetHeight <= 0.0f)
+        {
+            md.uniformScale = 1.0f;
+            return handle;
+        }
 
+        float srcHeight = 0.0f;
+        bool  hasHeight = false;
 
+        // ------------------------------------------------------------
+        // 1) まずは「メッシュローカル高さ」を従来どおり求める
+        //    - 複数メッシュ: MeshGroup 全体の skinned_vertices_ から取得
+        //    - それで取れなければ MeasureSkinnedHeightY() にフォールバック
+        // ------------------------------------------------------------
+        FbxMeshGroup& group = md.pFbx->MeshGroup();
+        if (!group.Empty() && group.MeshCount() > 0)
+        {
+            const auto& meshes = group.Meshes();
+
+            bool  first = true;
+            float minY = 0.0f;
+            float maxY = 0.0f;
+
+            for (size_t mi = 0; mi < meshes.size(); ++mi)
+            {
+                const std::unique_ptr<FbxMesh>& mesh = meshes[mi];
+                if (!mesh) continue;
+
+                const auto& data = mesh->Data();
+
+                // スキニング後頂点が存在するときだけ使う
+                if (!data.skinned_vertices_.empty() &&
+                    !data.influences_.empty() &&
+                    !data.bind_vertices_.empty())
+                {
+                    for (size_t vi = 0; vi < data.skinned_vertices_.size(); ++vi)
+                    {
+                        const auto& v = data.skinned_vertices_[vi];
+
+                        if (first)
+                        {
+                            minY = maxY = v.pos.y;
+                            first = false;
+                        }
+                        else
+                        {
+                            if (v.pos.y < minY) minY = v.pos.y;
+                            if (v.pos.y > maxY) maxY = v.pos.y;
+                        }
+                    }
+                }
+            }
+
+            if (!first)
+            {
+                srcHeight = maxY - minY;
+                hasHeight = true;
+            }
+        }
+
+        // グループから有効な高さが取れなかった場合：
+        // シングルメッシュ用の従来ロジックにフォールバック
         const float EPS = 1e-5f;
-        if (srcHeight < EPS || targetHeight <= 0.0f)
+        if (!hasHeight)
+        {
+            srcHeight = md.pFbx->MeasureSkinnedHeightY();
+        }
+
+        // ------------------------------------------------------------
+        // 2) root 直下の「メッシュを持つノード」の local_scale を拾う
+        //    - SillyDancing: だいたい 1.0
+        //    - TriAvater   : だいたい 100.0
+        // ------------------------------------------------------------
+        float nodeScale = 1.0f;
+        bool  hasNodeScale = false;
+
+        const ufbx_scene* scene = md.pFbx->Scene();
+        if (scene && scene->root_node)
+        {
+            const ufbx_node* root = scene->root_node;
+            size_t childCount = root->children.count;
+
+            for (size_t i = 0; i < childCount; ++i)
+            {
+                const ufbx_node* child = root->children.data[i];
+                if (!child) continue;
+
+                // メッシュを持つノードだけを見る（Eye, Body.001 など）
+                if (!child->mesh) continue;
+
+                const ufbx_transform& lt = child->local_transform;
+
+                double sx = lt.scale.x;
+                double sy = lt.scale.y;
+                double sz = lt.scale.z;
+
+                // 一応 3軸の平均値をスケールとみなす
+                double sum = sx + sy + sz;
+                double s = sum / 3.0;
+
+                if (s > 0.0)
+                {
+                    float sf = (float)s;
+
+                    if (!hasNodeScale)
+                    {
+                        nodeScale = sf;
+                        hasNodeScale = true;
+                    }
+                    else
+                    {
+                        // 複数メッシュがあっても極端にブレないように簡単に平均
+                        nodeScale = (nodeScale + sf) * 0.5f;
+                    }
+                }
+            }
+        }
+
+        // ------------------------------------------------------------
+        // 3) 「実効高さ = メッシュローカル高さ × ノードスケール」で正規化スケール決定
+        //
+        //    worldHeight ≒ srcHeight * nodeScale * uniformScale
+        //    → uniformScale = targetHeight / (srcHeight * nodeScale)
+        //
+        //    SillyDancing : nodeScale ≒ 1   → 従来どおり
+        //    TriAvater   : nodeScale ≒ 100 → 100倍された分をここで打ち消す
+        // ------------------------------------------------------------
+        float effectiveHeight = srcHeight;
+
+        if (hasNodeScale)
+        {
+            effectiveHeight *= nodeScale;
+        }
+
+        if (effectiveHeight < EPS)
         {
             md.uniformScale = 1.0f;
         }
         else
         {
-            md.uniformScale = targetHeight / srcHeight;
+            md.uniformScale = targetHeight / effectiveHeight;
         }
 
         return handle;

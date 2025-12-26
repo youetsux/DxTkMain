@@ -18,6 +18,7 @@ public:
 private:
 	GameObject* actor_ = nullptr;
     GameObject* actor2_ = nullptr;
+    GameObject* actor3_ = nullptr;
     //ModelComponent* mc_;
     //ModelComponent* mc2_;
     //ModelComponent* mc3_;

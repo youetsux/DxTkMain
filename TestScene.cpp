@@ -6,8 +6,12 @@
 #include "Engine/Camera.h"
 #include "Engine/EngineTime.h"
 #include "Engine/sound.h"
-
+#include "Engine/Gfx.h"
 #include <DirectXMath.h>
+
+
+
+
 
 TestScene::TestScene()
 {
@@ -20,44 +24,49 @@ TestScene::~TestScene()
 
 void TestScene::Initialize()
 {
-    Camera::SetPosition({ 0.0f, 1.0f, -2.0f });
+    Camera::SetPosition({ 0.0f, 1.0f, -5.0f });
     Camera::SetTarget({ 0.0, 1.0, 0.0 });
 
     actor_ = new GameObject(&Root(), "Actor");
-    auto mc = new ModelComponent(actor_, "Assets/SillyDancing.fbx", 1.0f);
-    //mc2_ = new ModelComponent(actor_, "Assets/SillyDancing.fbx", 1.0f);
-    //auto mc = new ModelComponent(actor_, "Assets/SillyDancing.fbx", 1.0f);
-    //mc_ = new ModelComponent(actor_, "Assets/abc.fbx", 1.0f);
+    auto mc = new ModelComponent(actor_, "Assets/BoyJump.fbx", 1.0f);
 
     // モデル（必要に応じてパス・正規化高さを調整）
     actor_->AddComponent(mc);
-    //actor_->AddComponent(mc2_);
 
     // 初期位置 mc_
     actor_->GetTransform().position_ = { 0.0f, 0.0f, 0.0f };
+    actor_->GetTransform().scale_ = { 1.0f, 1.0f, 1.0f };
     mc->SetAnimStack(0);
-    mc->SetAnimRange(0, 229, 1.0f);
+    mc->SetAnimRange(0, 92, 1.0f);
     mc->SetLoop(true);
 
     //2体目
     actor2_ = new GameObject(&Root(), "Actor2");
-    auto mc2 = new ModelComponent(actor2_, "Assets/TriAvater.fbx", 1.0);
-    //mc2_ = new ModelComponent(actor_, "Assets/SillyDancing.fbx", 1.0f);
-    //auto mc = new ModelComponent(actor_, "Assets/SillyDancing.fbx", 1.0f);
-    //mc_ = new ModelComponent(actor_, "Assets/abc.fbx", 1.0f);
+    auto mc2 = new ModelComponent(actor2_, "Assets/TriAvater.fbx", 1.0f);
 
     // モデル（必要に応じてパス・正規化高さを調整）
-    actor_->AddComponent(mc2);
-    //actor_->AddComponent(mc2_);
-
+    actor2_->AddComponent(mc2);
+    mc2->SetAnimStack(0);
+    mc2->SetAnimRange(0, 39, 1.0f);
+    mc2->SetLoop(true);
     // 初期位置 mc_
     actor2_->GetTransform().position_ = { 1.0f, 0.0f, 0.0f };
-    actor2_->GetTransform().rotate_ = { -90.0f, 0.0f, 0.0f };
-    actor2_->GetTransform().scale_ = { 0.00005f, 0.00005f, 0.00005f };
-    mc2->SetAnimStack(1);
-    mc2->SetAnimRange(0, 229, 1.0f);
-    mc2->SetLoop(true);
+    actor2_->GetTransform().rotate_ = { 0.0f, 0.0f, 0.0f };//blenderのモデルだけ90度寝てる
+    actor2_->GetTransform().scale_ = { 1.0f, 1.0f, 1.0f };
 
+
+    //3体目
+    actor3_ = new GameObject(&Root(), "Actor3");
+    auto mc3 = new ModelComponent(actor3_, "Assets/SillyDancing.fbx", 1.0);
+
+    // モデル（必要に応じてパス・正規化高さを調整）
+    actor3_->AddComponent(mc3);
+    mc3->SetAnimStack(1);
+    mc3->SetAnimRange(0, 229, 1.0f);
+    mc3->SetLoop(true);
+    // 初期位置 mc_
+    actor3_->GetTransform().position_ = { -1.0f, 0.0f, 0.0f };
+    actor3_->GetTransform().scale_ = { 1.0f, 1.0f, 1.0f };
 
 
 }
