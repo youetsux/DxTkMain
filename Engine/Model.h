@@ -1,16 +1,16 @@
 #pragma once
 #include <string>
 #include <DirectXMath.h>
-#include "Transform.h"   // 既存の Transform クラス
+#include "Transform.h"   // 依存の Transform クラス
 
-// RayCastData は別ヘッダで定義されている前提
+// RayCastData は別ヘッダーで定義されている前提
 struct RayCastData;
 
 namespace Model
 {
     void Initialize();
     int  Load(std::string fileName);
-    // 追加：シーン半径を targetRadius に正規化して読み込む版
+    // 追加：シーン半径を targetRadius に正規化して読み込む版（実際は targetHeight）
     int  Load(const std::string& fileName, float targetHeight);
 
     void Draw(int handle);
@@ -25,7 +25,6 @@ namespace Model
     DirectX::XMMATRIX GetMatrix(int handle);
     void RayCast(int handle, RayCastData* data);
 
-
     // そのモデルが持つ AnimStack の数を返す
     int GetAnimStackCount(int handle);
 
@@ -38,11 +37,19 @@ namespace Model
     // AnimStack を名前で指定
     void SetAnimStack(int handle, const std::string& stackName);
 
-    // ★ 追加：アニメのポーズ制御
+    // 追加：アニメのポーズ制御
     void SetAnimPaused(int handle, bool paused);
     bool IsAnimPaused(int handle);
 
-    // ★ 追加：ループ設定
+    // 追加：ループ設定
     void SetAnimLoop(int handle, bool loop);
     bool IsAnimLoop(int handle);
+
+    // ------------------------------------------------------------
+    // 追加：ルートスケール（手動正規化用）
+    // ・BuildWorldMatrix() が world = S(root) * worldTransform で適用
+    //   → 平行移動もスケールされ、「ルートスケール後の大きさ」で移動になる
+    // ------------------------------------------------------------
+    void  SetRootScale(int handle, float rootScale);
+    float GetRootScale(int handle);
 }

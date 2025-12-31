@@ -42,10 +42,11 @@ void TestScene::Initialize()
 
     //2体目
     actor2_ = new GameObject(&Root(), "Actor2");
-    auto mc2 = new ModelComponent(actor2_, "Assets/TriAvater.fbx", 1.0f);
+    auto mc2 = new ModelComponent(actor2_, "Assets/TriAvater.fbx");
 
     // モデル（必要に応じてパス・正規化高さを調整）
     actor2_->AddComponent(mc2);
+    mc2->SetRootScale(0.0001f);
     mc2->SetAnimStack(0);
     mc2->SetAnimRange(0, 39, 1.0f);
     mc2->SetLoop(true);

@@ -9,6 +9,8 @@ ModelComponent::ModelComponent(GameObject* owner,
     , modelPath_(modelPath)
     , targetHeight_(targetHeight)
     , modelHandle_(-1)
+    , hasRootScaleOverride_(false)
+    , rootScale_(1.0f)
 {
 }
 
@@ -32,6 +34,14 @@ void ModelComponent::Initialize()
         modelHandle_ = Model::Load(modelPath_);
     }
 
+    if (modelHandle_ < 0) return;
+
+    // 手動ルートスケール（明示指定があるときだけ）
+    if (hasRootScaleOverride_)
+    {
+        Model::SetRootScale(modelHandle_, rootScale_);
+    }
+
     // Owner の Transform を Model に接続
     Model::SetTransform(modelHandle_, owner_->GetTransform());
 }
@@ -51,6 +61,30 @@ void ModelComponent::Release()
         Model::Release(modelHandle_);
         modelHandle_ = -1;
     }
+}
+
+//-----------------------------------------------------------
+// 手動正規化（ルートスケール）
+//-----------------------------------------------------------
+void ModelComponent::SetRootScale(float rootScale)
+{
+    hasRootScaleOverride_ = true;
+    rootScale_ = rootScale;
+
+    // 既にロード済みなら即反映
+    if (modelHandle_ >= 0)
+    {
+        Model::SetRootScale(modelHandle_, rootScale_);
+    }
+}
+
+float ModelComponent::GetRootScale() const
+{
+    if (modelHandle_ >= 0)
+    {
+        return Model::GetRootScale(modelHandle_);
+    }
+    return rootScale_;
 }
 
 //-----------------------------------------------------------
