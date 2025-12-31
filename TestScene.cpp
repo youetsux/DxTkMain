@@ -34,24 +34,25 @@ void TestScene::Initialize()
     actor_->AddComponent(mc);
 
     // 初期位置 mc_
-    actor_->GetTransform().position_ = { 0.0f, 0.0f, 0.0f };
+    actor_->GetTransform().position_ = { 0.0f, 0.5f, 0.0f };
     actor_->GetTransform().scale_ = { 1.0f, 1.0f, 1.0f };
     mc->SetAnimStack(0);
-    mc->SetAnimRange(0, 92, 1.0f);
+    mc->SetAnimRange(0, 200, 1.0f);
     mc->SetLoop(true);
 
     //2体目
     actor2_ = new GameObject(&Root(), "Actor2");
-    auto mc2 = new ModelComponent(actor2_, "Assets/TriAvater.fbx", 1.0f);
+    auto mc2 = new ModelComponent(actor2_, "Assets/TriAvater.fbx");
 
     // モデル（必要に応じてパス・正規化高さを調整）
     actor2_->AddComponent(mc2);
+    mc2->SetRootScale(0.0001f);
     mc2->SetAnimStack(0);
     mc2->SetAnimRange(0, 39, 1.0f);
     mc2->SetLoop(true);
     // 初期位置 mc_
     actor2_->GetTransform().position_ = { 1.0f, 0.0f, 0.0f };
-    actor2_->GetTransform().rotate_ = { 0.0f, 0.0f, 0.0f };//blenderのモデルだけ90度寝てる
+    actor2_->GetTransform().rotate_ = { -90.0f, 0.0f, 0.0f };//blenderのモデルだけ90度寝てる
     actor2_->GetTransform().scale_ = { 1.0f, 1.0f, 1.0f };
 
 
