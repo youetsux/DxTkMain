@@ -40,6 +40,9 @@ public:
     DirectX::XMFLOAT4 GetRootRotationQuaternion() const;
     bool HasRootRotationOverride() const { return hasRootRotationOverride_; }
 
+    // degree（度）指定
+    void SetRootRotationYawPitchRollDeg(float yawDeg, float pitchDeg, float rollDeg);
+
     // --- アニメ：最小API ---
     void SetAnimRange(int startFrame, int endFrame, float animSpeed);
     void Play(int startFrame, int endFrame, float animSpeed, bool loop);
@@ -56,8 +59,9 @@ public:
     std::string GetAnimStackName(int index) const;
     void SetAnimStack(int index);
     void SetAnimStack(const std::string& stackName);
-    // degree（度）指定
-    void SetRootRotationYawPitchRollDeg(float yawDeg, float pitchDeg, float rollDeg);
+
+    // 追加：現在選択中のアニメをフル再生（フレーム指定APIは残す）
+    void SetAnimation(float animSpeed, bool loop);
 
 private:
     std::string modelPath_;

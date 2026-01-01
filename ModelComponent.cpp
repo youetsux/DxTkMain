@@ -2,9 +2,9 @@
 #include "Engine\GameObject.h"
 #include "Engine\Transform.h"
 
-ModelComponent::ModelComponent(GameObject* owner,
-    const std::string& modelPath,
-    float targetHeight)
+using namespace DirectX;
+
+ModelComponent::ModelComponent(GameObject* owner, const std::string& modelPath, float targetHeight)
     : Component(owner)
     , modelPath_(modelPath)
     , targetHeight_(targetHeight)
@@ -12,7 +12,7 @@ ModelComponent::ModelComponent(GameObject* owner,
     , hasRootScaleOverride_(false)
     , rootScale_(1.0f)
     , hasRootRotationOverride_(false)
-    , rootRotationQ_(DirectX::XMFLOAT4(0, 0, 0, 1))
+    , rootRotationQ_(0, 0, 0, 1)
 {
 }
 
@@ -36,41 +36,36 @@ void ModelComponent::Initialize()
 
     if (modelHandle_ < 0) return;
 
-    // 手動ルートスケール（明示指定があるときだけ）
+    // Transform 紐付け
+    Model::SetTransform(modelHandle_, owner_->GetTransform());
+
+    // 手動ルート指定があれば適用
     if (hasRootScaleOverride_)
     {
         Model::SetRootScale(modelHandle_, rootScale_);
     }
-
-    // 手動ルートローテーション（明示指定があるときだけ）
     if (hasRootRotationOverride_)
     {
         Model::SetRootRotationQuaternion(modelHandle_, rootRotationQ_);
     }
-
-    Model::SetTransform(modelHandle_, owner_->GetTransform());
 }
 
 void ModelComponent::Draw()
 {
-    if (modelHandle_ >= 0)
-    {
-        Model::Draw(modelHandle_);
-    }
+    if (modelHandle_ < 0) return;
+    Model::Draw(modelHandle_);
 }
 
 void ModelComponent::Release()
 {
-    if (modelHandle_ >= 0)
-    {
-        Model::Release(modelHandle_);
-        modelHandle_ = -1;
-    }
+    if (modelHandle_ < 0) return;
+    Model::Release(modelHandle_);
+    modelHandle_ = -1;
 }
 
-//-----------------------------------------------------------
-// 手動ルートスケール
-//-----------------------------------------------------------
+// -----------------------------
+// Root Scale
+// -----------------------------
 void ModelComponent::SetRootScale(float rootScale)
 {
     hasRootScaleOverride_ = true;
@@ -84,22 +79,18 @@ void ModelComponent::SetRootScale(float rootScale)
 
 float ModelComponent::GetRootScale() const
 {
-    if (modelHandle_ >= 0)
-    {
-        return Model::GetRootScale(modelHandle_);
-    }
     return rootScale_;
 }
 
-//-----------------------------------------------------------
-// 手動ルートローテーション
-//-----------------------------------------------------------
+// -----------------------------
+// Root Rotation
+// -----------------------------
 void ModelComponent::SetRootRotationYawPitchRoll(float yaw, float pitch, float roll)
 {
     hasRootRotationOverride_ = true;
 
-    DirectX::XMVECTOR q = DirectX::XMQuaternionRotationRollPitchYaw(pitch, yaw, roll);
-    DirectX::XMStoreFloat4(&rootRotationQ_, q);
+    XMVECTOR q = XMQuaternionRotationRollPitchYaw(pitch, yaw, roll);
+    XMStoreFloat4(&rootRotationQ_, q);
 
     if (modelHandle_ >= 0)
     {
@@ -120,16 +111,18 @@ void ModelComponent::SetRootRotationQuaternion(const DirectX::XMFLOAT4& q)
 
 DirectX::XMFLOAT4 ModelComponent::GetRootRotationQuaternion() const
 {
-    if (modelHandle_ >= 0)
-    {
-        return Model::GetRootRotationQuaternion(modelHandle_);
-    }
     return rootRotationQ_;
 }
 
-//-----------------------------------------------------------
-// アニメ：最小API
-//-----------------------------------------------------------
+void ModelComponent::SetRootRotationYawPitchRollDeg(float yawDeg, float pitchDeg, float rollDeg)
+{
+    const float DEG2RAD = DirectX::XM_PI / 180.0f;
+    SetRootRotationYawPitchRoll(yawDeg * DEG2RAD, pitchDeg * DEG2RAD, rollDeg * DEG2RAD);
+}
+
+// -----------------------------
+// Animation wrappers
+// -----------------------------
 void ModelComponent::SetAnimRange(int startFrame, int endFrame, float animSpeed)
 {
     if (modelHandle_ < 0) return;
@@ -199,21 +192,11 @@ void ModelComponent::SetAnimStack(const std::string& stackName)
     Model::SetAnimStack(modelHandle_, stackName);
 }
 
-void ModelComponent::SetRootRotationYawPitchRollDeg(float yawDeg, float pitchDeg, float rollDeg)
+void ModelComponent::SetAnimation(float animSpeed, bool loop)
 {
-    hasRootRotationOverride_ = true;
+    if (modelHandle_ < 0) return;
 
-    const float DEG2RAD = DirectX::XM_PI / 180.0f;
-
-    const float yaw = yawDeg * DEG2RAD;
-    const float pitch = pitchDeg * DEG2RAD;
-    const float roll = rollDeg * DEG2RAD;
-
-    DirectX::XMVECTOR q = DirectX::XMQuaternionRotationRollPitchYaw(pitch, yaw, roll);
-    DirectX::XMStoreFloat4(&rootRotationQ_, q);
-
-    if (modelHandle_ >= 0)
-    {
-        Model::SetRootRotationQuaternion(modelHandle_, rootRotationQ_);
-    }
+    Model::SetAnimLoop(modelHandle_, loop);
+    Model::SetAnimPaused(modelHandle_, false);
+    Model::SetAnimation(modelHandle_, animSpeed);
 }
