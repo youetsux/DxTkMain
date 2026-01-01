@@ -50,5 +50,5 @@ private:
 private:
     //DirectX::CommonStates* States() const { return m_states.get(); }
     //std::shared_ptr<DirectX::CommonStates> m_states;
-    float m_clear[4]{ 0.1f, 0.18f, 0.25f, 1.0f };
+    float m_clear[4]{ 250/255.0f, 250/255.0f, 210/255.0f, 1.0f };
 };

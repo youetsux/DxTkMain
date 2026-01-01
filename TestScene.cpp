@@ -24,7 +24,7 @@ TestScene::~TestScene()
 
 void TestScene::Initialize()
 {
-    Camera::SetPosition({ 0.0f, 1.0f, -5.0f });
+    Camera::SetPosition({ 0.0f, 1.0f, -3.0f });
     Camera::SetTarget({ 0.0, 1.0, 0.0 });
 
     actor_ = new GameObject(&Root(), "Actor");
@@ -37,7 +37,7 @@ void TestScene::Initialize()
     actor_->GetTransform().position_ = { 0.0f, 0.5f, 0.0f };
     actor_->GetTransform().scale_ = { 1.0f, 1.0f, 1.0f };
     mc->SetAnimStack(0);
-    mc->SetAnimRange(0, 200, 1.0f);
+    mc->SetAnimRange(0, 92, 1.0f);
     mc->SetLoop(true);
 
     //2体目
@@ -47,12 +47,14 @@ void TestScene::Initialize()
     // モデル（必要に応じてパス・正規化高さを調整）
     actor2_->AddComponent(mc2);
     mc2->SetRootScale(0.0001f);
+    //mc2->SetRootRotationYawPitchRoll(0, DirectX::XMConvertToRadians( - 90.0f), 0);
+    mc2->SetRootRotationYawPitchRollDeg(0, -90, 0);
     mc2->SetAnimStack(0);
     mc2->SetAnimRange(0, 39, 1.0f);
     mc2->SetLoop(true);
     // 初期位置 mc_
-    actor2_->GetTransform().position_ = { 1.0f, 0.0f, 0.0f };
-    actor2_->GetTransform().rotate_ = { -90.0f, 0.0f, 0.0f };//blenderのモデルだけ90度寝てる
+    actor2_->GetTransform().position_ = { 2.0f, 0.0f, 0.0f };
+    //actor2_->GetTransform().rotate_ = { -90.0f, 0.0f, 0.0f };//blenderのモデルだけ90度寝てる
     actor2_->GetTransform().scale_ = { 1.0f, 1.0f, 1.0f };
 
 
@@ -81,11 +83,11 @@ void TestScene::Update()
     // --- 入力で左右に動かす（追従が分かりやすいので一緒に） ---
     if (Input::IsKey(VK_LEFT))
     {
-        actor_->GetTransform().position_.x -= 1.0f * dt;
+        actor_->GetTransform().position_.x -= 0.1f * dt;
     }
     if (Input::IsKey(VK_RIGHT))
     {
-        actor_->GetTransform().position_.x += 1.0f * dt;
+        actor_->GetTransform().position_.x += 0.1f * dt;
     }
 
     // --- 追従カメラ（最小） ---

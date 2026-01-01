@@ -1,20 +1,15 @@
 #pragma once
 #include <string>
+#include <DirectXMath.h>
 #include "Engine\Component.h"
-#include "Engine\Model.h"      // Model::Load/Draw/Release/SetTransform/Anim API
+#include "Engine\Model.h"
 
 class GameObject;
 
 //-----------------------------------------------------------
-// ModelComponent（フェーズ1：最小アニマAPI + ロード時正規化）
-// 変更点(2025-12-12):
-// - コンストラクタで targetHeight を受け取る（ロード時正規化用）
-//   targetHeight <= 0 の場合は通常ロード（Model::Load(path)）
-//   targetHeight > 0 の場合は正規化ロード（Model::Load(path, targetHeight)）
-//
-// 変更点(2026-01-01):
-// - 「手動正規化」用に RootScale（ルートスケール）を ModelComponent から指定できるようにする
-//   ※既存挙動維持のため、明示指定があるときだけ Model::SetRootScale() を呼ぶ
+// ModelComponent
+// - targetHeight による自動スケールは維持
+// - 手動「RootScale」「RootRotation」も指定可能（明示指定時のみ上書き）
 //-----------------------------------------------------------
 class ModelComponent : public Component
 {
@@ -29,18 +24,23 @@ public:
     void Release() override;
 
 public:
-    // --- 基本 ---
     int  Handle() const { return modelHandle_; }
     bool IsLoaded() const { return modelHandle_ >= 0; }
     float TargetHeight() const { return targetHeight_; }
 
-    // --- 手動正規化（ルートスケール） ---
-    // 明示的に呼ばれたときだけ override フラグが立つ（既存の targetHeight 正規化を壊さない）
+    // --- 手動ルートスケール ---
     void  SetRootScale(float rootScale);
     float GetRootScale() const;
     bool  HasRootScaleOverride() const { return hasRootScaleOverride_; }
 
-    // --- アニメ：最小API（フェーズ1） ---
+    // --- 手動ルートローテーション ---
+    // 単位はラジアン
+    void SetRootRotationYawPitchRoll(float yaw, float pitch, float roll);
+    void SetRootRotationQuaternion(const DirectX::XMFLOAT4& q);
+    DirectX::XMFLOAT4 GetRootRotationQuaternion() const;
+    bool HasRootRotationOverride() const { return hasRootRotationOverride_; }
+
+    // --- アニメ：最小API ---
     void SetAnimRange(int startFrame, int endFrame, float animSpeed);
     void Play(int startFrame, int endFrame, float animSpeed, bool loop);
 
@@ -56,13 +56,17 @@ public:
     std::string GetAnimStackName(int index) const;
     void SetAnimStack(int index);
     void SetAnimStack(const std::string& stackName);
+    // degree（度）指定
+    void SetRootRotationYawPitchRollDeg(float yawDeg, float pitchDeg, float rollDeg);
 
 private:
     std::string modelPath_;
-    float targetHeight_;   // ロード時正規化高さ（<=0: 無効）
+    float targetHeight_;
     int modelHandle_;
 
-    // 追加：手動ルートスケール
     bool  hasRootScaleOverride_;
     float rootScale_;
+
+    bool  hasRootRotationOverride_;
+    DirectX::XMFLOAT4 rootRotationQ_;
 };

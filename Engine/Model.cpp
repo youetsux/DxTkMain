@@ -46,8 +46,11 @@ namespace
 		AnimState    anim;
 		bool         inUse = false;
 
-		// これを「ルートスケール」として扱う（world = S * worldTransform）
+		// 既存：uniformScale（= ルートスケールとして扱う）
 		float        uniformScale = 1.0f;
+
+		// 追加：ルートローテーション（クォータニオン）
+		DirectX::XMFLOAT4 rootRotationQ = DirectX::XMFLOAT4(0, 0, 0, 1);
 	};
 
 	std::vector<ModelData> g_models;
@@ -86,7 +89,6 @@ namespace
 		itRef->second--;
 		if (itRef->second <= 0)
 		{
-			// キャッシュからも消す（同一ポインタを探す）
 			for (auto it = g_modelCache.begin(); it != g_modelCache.end(); ++it)
 			{
 				if (it->second == pFbx)
@@ -102,8 +104,6 @@ namespace
 
 	// ------------------------------------------------------------
 	// Step4: sub-mesh solo draw control
-	//   F9  : toggle solo draw (all <-> 0)
-	//   F10 : next sub-mesh (when solo draw enabled)
 	// ------------------------------------------------------------
 	static int s_debug_draw_mesh_index = -1;
 
@@ -239,19 +239,41 @@ namespace
 
 	// ------------------------------------------------------------
 	// Matrix
+	// world = R_root * S_root * TransformWorld
 	// ------------------------------------------------------------
+// world = (root) * (transform world) ただし translation は影響させない
+// → 原点回転/原点拡縮（位置は固定、向き・大きさだけ変更）
 	XMMATRIX BuildWorldMatrix(const ModelData& md)
 	{
 		XMMATRIX world = XMMatrixIdentity();
 		if (md.pTransform) world = md.pTransform->GetWorldMatrix();
 
+		// translation を退避（DirectXMath の XMMATRIX は r[3] が平行移動）
+		XMVECTOR t = world.r[3];
+
+		// translation をゼロにして回転/拡縮だけにする
+		world.r[3] = XMVectorSet(0.0f, 0.0f, 0.0f, 1.0f);
+
+		// Root scale（原点拡縮）
 		if (md.uniformScale != 1.0f)
 		{
 			XMMATRIX s = XMMatrixScaling(md.uniformScale, md.uniformScale, md.uniformScale);
-			world = s * world; // ルートスケールを先に掛ける（平行移動もスケールされる）
+			world = s * world;
 		}
+
+		// Root rotation（原点回転）
+		{
+			XMVECTOR q = XMLoadFloat4(&md.rootRotationQ);
+			XMMATRIX r = XMMatrixRotationQuaternion(q);
+			world = r * world;
+		}
+
+		// translation を戻す（位置は固定）
+		world.r[3] = t;
+
 		return world;
 	}
+
 }
 
 //====================================
@@ -282,7 +304,6 @@ namespace Model
 		int h = AllocHandle();
 		auto& md = g_models[h];
 
-		// 既に使っていたら解放
 		if (md.inUse && md.pFbx)
 		{
 			ReleaseSharedModel(md.pFbx);
@@ -316,12 +337,12 @@ namespace Model
 		md.fileName = fileName;
 		md.anim = AnimState{};
 		md.uniformScale = 1.0f;
+		md.rootRotationQ = XMFLOAT4(0, 0, 0, 1); // 追加：デフォルトは回転なし
 		md.inUse = true;
 
 		return h;
 	}
 
-	// 既存：targetHeight でスケール正規化してロード
 	int Load(const std::string& fileName, float targetHeight)
 	{
 		int handle = Load(fileName);
@@ -679,9 +700,7 @@ namespace Model
 	}
 
 	// ------------------------------------------------------------
-	// 追加：ルートスケール（手動正規化）
-	// ※ targetHeight 正規化（Load(file, targetHeight)）を壊さないため、
-	//    ModelComponent 側は「明示的に上書きしたときだけ」呼ぶ運用にする。
+	// 追加：ルートスケール
 	// ------------------------------------------------------------
 	void SetRootScale(int handle, float rootScale)
 	{
@@ -694,4 +713,42 @@ namespace Model
 		if (!IsValidHandle(handle)) return 1.0f;
 		return g_models[handle].uniformScale;
 	}
+
+	// ------------------------------------------------------------
+	// 追加：ルートローテーション
+	// ------------------------------------------------------------
+	void SetRootRotationYawPitchRoll(int handle, float yaw, float pitch, float roll)
+	{
+		if (!IsValidHandle(handle)) return;
+
+		XMVECTOR q = XMQuaternionRotationRollPitchYaw(pitch, yaw, roll);
+		XMStoreFloat4(&g_models[handle].rootRotationQ, q);
+	}
+
+	void SetRootRotationQuaternion(int handle, const DirectX::XMFLOAT4& q)
+	{
+		if (!IsValidHandle(handle)) return;
+		g_models[handle].rootRotationQ = q;
+	}
+
+	DirectX::XMFLOAT4 GetRootRotationQuaternion(int handle)
+	{
+		if (!IsValidHandle(handle)) return DirectX::XMFLOAT4(0, 0, 0, 1);
+		return g_models[handle].rootRotationQ;
+	}
 }
+
+void Model::SetRootRotationYawPitchRollDeg(int handle, float yawDeg, float pitchDeg, float rollDeg)
+{
+	if (!IsValidHandle(handle)) return;
+
+	const float DEG2RAD = DirectX::XM_PI / 180.0f;
+
+	const float yaw = yawDeg * DEG2RAD;
+	const float pitch = pitchDeg * DEG2RAD;
+	const float roll = rollDeg * DEG2RAD;
+
+	XMVECTOR q = DirectX::XMQuaternionRotationRollPitchYaw(pitch, yaw, roll);
+	DirectX::XMStoreFloat4(&g_models[handle].rootRotationQ, q);
+}
+
