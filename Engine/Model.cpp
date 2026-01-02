@@ -145,7 +145,6 @@ namespace
         return anim;
     }
 
-    // ★置き換え：FBX fps（scene->settings.frames_per_second）を使う
     void UpdateAnimation(ModelData& md, const ufbx_anim* anim)
     {
         // FBX の fps を使う（未設定/異常値はフォールバック）
@@ -163,6 +162,8 @@ namespace
 
         if (anim && hasAnimSetting)
         {
+            const float prevFrame = md.anim.currentFrame;
+
             if (!md.anim.paused)
             {
                 const double dtSec = EngineTime::DeltaTime();
@@ -206,25 +207,39 @@ namespace
                 }
             }
 
-            const double secondsPerFrame = 1.0 / fps;
-            double tSec = anim->time_begin + double(md.anim.currentFrame) * secondsPerFrame;
+            // paused / 同一フレームのときは timeSec を再計算せず、前回値を使う（double再計算ブレ回避）
+            bool needRecalc = (md.anim.currentFrame != prevFrame);
 
-            if (md.pFbx) md.pFbx->UpdateSkeletonAtTime(anim, tSec);
+            // 初回など timeSec が未設定の場合は再計算する
+            if (!needRecalc && md.anim.timeSec == 0.0)
+            {
+                needRecalc = true;
+            }
+
+            if (needRecalc)
+            {
+                const double secondsPerFrame = 1.0 / fps;
+                md.anim.timeSec = anim->time_begin + double(md.anim.currentFrame) * secondsPerFrame;
+            }
+
+            if (md.pFbx) md.pFbx->UpdateSkeletonAtTime(anim, md.anim.timeSec);
         }
         else if (anim)
         {
             md.anim.currentFrame = (float)md.anim.startFrame;
 
             const double secondsPerFrame = 1.0 / fps;
-            double tSec = anim->time_begin + double(md.anim.currentFrame) * secondsPerFrame;
+            md.anim.timeSec = anim->time_begin + double(md.anim.currentFrame) * secondsPerFrame;
 
-            if (md.pFbx) md.pFbx->UpdateSkeletonAtTime(anim, tSec);
+            if (md.pFbx) md.pFbx->UpdateSkeletonAtTime(anim, md.anim.timeSec);
         }
         else
         {
             if (md.pFbx) md.pFbx->UpdateSkeletonAtTime(0.0);
         }
     }
+
+
 
     // Model-space root pose first, then world placement:
     // v' = (World * RootLocal) * v

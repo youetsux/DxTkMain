@@ -129,4 +129,9 @@ private:
     int debug_draw_mesh_index_ = -1;
 
     FbxMeshGroup mesh_group_;
+    // Step2: cache init
+    const ufbx_anim* last_anim_ = nullptr;
+    double last_time_sec_ = -1.0;
+    bool pose_dirty_ = true;
+
 };

@@ -44,6 +44,10 @@ void FbxModel::Reset()
 
     // Step1/2/3: O[vc[cȂ
     mesh_group_.Clear();
+    // Step2: cache init
+    last_anim_ = nullptr;
+    last_time_sec_ = -1.0;
+    pose_dirty_ = true;
 }
 
 //============================================================
@@ -234,8 +238,21 @@ void FbxModel::UpdateSkeletonAtTime(double t_sec)
 {
     const ufbx_scene* scene = scene_.get();
     const ufbx_anim* anim = GetDefaultAnim();
+
+    // Step2: 同一 anim + 同一 timeSec なら skeleton 更新をスキップ
+    if (anim == last_anim_ && t_sec == last_time_sec_)
+    {
+        pose_dirty_ = false;
+        return;
+    }
+
+    last_anim_ = anim;
+    last_time_sec_ = t_sec;
+    pose_dirty_ = true;
+
     skeleton_.UpdateAtTime(scene, anim, t_sec);
 }
+
 
 //============================================================
 // UpdateSkeletonAtTimeiAjj
@@ -243,8 +260,21 @@ void FbxModel::UpdateSkeletonAtTime(double t_sec)
 void FbxModel::UpdateSkeletonAtTime(const ufbx_anim* anim, double t_sec)
 {
     const ufbx_scene* scene = scene_.get();
+
+    // Step2: 同一 anim + 同一 timeSec なら skeleton 更新をスキップ
+    if (anim == last_anim_ && t_sec == last_time_sec_)
+    {
+        pose_dirty_ = false;
+        return;
+    }
+
+    last_anim_ = anim;
+    last_time_sec_ = t_sec;
+    pose_dirty_ = true;
+
     skeleton_.UpdateAtTime(scene, anim, t_sec);
 }
+
 
 //============================================================
 // DrawiCPU XLjO{`j
