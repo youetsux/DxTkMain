@@ -143,6 +143,132 @@ namespace
         }
         return uvv;
     }
+    fs::path GetFbxDirectory(const char* fbx_path)
+    {
+        fs::path dir;
+        if (fbx_path) {
+            const size_t len = std::strlen(fbx_path);
+            dir = UfbxUtil::PathFromUtf8(fbx_path, len).parent_path();
+        }
+        return dir;
+    }
+
+    // ------------------------------------------------------------
+    // CommonStates / BasicEffect を必要なら生成する
+    //   ※ device は Gfx から取得したものを渡す（nullptr は呼び出し側で弾く）
+    // ------------------------------------------------------------
+    void EnsureStatesAndEffect(
+        ID3D11Device* device,
+        std::unique_ptr<DirectX::DX11::CommonStates>& states,
+        std::unique_ptr<DirectX::DX11::BasicEffect>& fx)
+    {
+        if (!states) {
+            states.reset(new DirectX::DX11::CommonStates(device));
+        }
+        if (!fx) {
+            fx.reset(new DirectX::DX11::BasicEffect(device));
+        }
+    }
+
+    // ------------------------------------------------------------
+    // BasicEffect に「固定の既定値」を設定する
+    //   ※ FBX ごとの差が無いライト/色などの初期値
+    // ------------------------------------------------------------
+    void ConfigureDefaultBasicEffect(DirectX::BasicEffect* fx)
+    {
+        fx->SetLightingEnabled(true);
+        fx->SetPerPixelLighting(true);
+
+        // 頂点カラーは使わず、テクスチャ/ライトで描く
+        fx->SetVertexColorEnabled(false);
+        fx->SetTextureEnabled(true);
+
+        // 環境光・拡散色
+        fx->SetAmbientLightColor({ 0.3f, 0.3f, 0.3f });
+        fx->SetDiffuseColor({ 1.0f,  1.0f,  1.0f, 1.0f });
+
+        // ライト0 を1本だけ有効化
+        fx->SetLightEnabled(0, true);
+        fx->SetLightDirection(0, { -0.5f, -1.0f, 0.3f });
+        fx->SetLightDiffuseColor(0, { 1.0f, 1.0f, 1.0f, 1.0f });
+    }
+
+    // ------------------------------------------------------------
+    // VertexPNT2 用の InputLayout を必要なら生成する
+    // ------------------------------------------------------------
+    bool EnsureInputLayout(
+        ID3D11Device* device,
+        DirectX::BasicEffect* fx,
+        Microsoft::WRL::ComPtr<ID3D11InputLayout>& layout)
+    {
+        if (layout) return true;
+
+        const void* bytecode = nullptr;
+        size_t      bytecode_size = 0;
+        fx->GetVertexShaderBytecode(&bytecode, &bytecode_size);
+
+        D3D11_INPUT_ELEMENT_DESC il[] =
+        {
+            { "SV_POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0,
+              (UINT)offsetof(FbxMesh::VertexPNT2, pos), D3D11_INPUT_PER_VERTEX_DATA, 0 },
+            { "NORMAL",      0, DXGI_FORMAT_R32G32B32_FLOAT, 0,
+              (UINT)offsetof(FbxMesh::VertexPNT2, nrm), D3D11_INPUT_PER_VERTEX_DATA, 0 },
+            { "TEXCOORD",    0, DXGI_FORMAT_R32G32_FLOAT,    0,
+              (UINT)offsetof(FbxMesh::VertexPNT2, uv),  D3D11_INPUT_PER_VERTEX_DATA, 0 },
+        };
+
+        HRESULT hr = device->CreateInputLayout(
+            il, 3, bytecode, bytecode_size, layout.ReleaseAndGetAddressOf());
+        return SUCCEEDED(hr);
+    }
+
+    // ------------------------------------------------------------
+    // 1つの MeshPart に対して SRV を作る（埋め込み / 外部ファイル）
+    //   失敗したら out_srv は Reset() される
+    // ------------------------------------------------------------
+    void BuildTextureForPart(
+        ID3D11Device* device,
+        ID3D11DeviceContext* ctx,
+        const fs::path& fbx_dir,
+        const ufbx_material* mat,
+        Microsoft::WRL::ComPtr<ID3D11ShaderResourceView>& out_srv)
+    {
+        out_srv.Reset();
+
+        const ufbx_texture* tex = UfbxUtil::GetDiffuseTexture(mat);
+        if (!tex) return;
+
+        HRESULT hr = E_FAIL;
+
+        // (A) FBX 埋め込みテクスチャ（content）
+        if (tex->content.size > 0 && tex->content.data) {
+            hr = DirectX::CreateWICTextureFromMemory(
+                device,
+                ctx,
+                reinterpret_cast<const uint8_t*>(tex->content.data),
+                tex->content.size,
+                nullptr,
+                out_srv.ReleaseAndGetAddressOf());
+        }
+        // (B) 外部ファイル参照（filename）
+        else if (tex->filename.length > 0 && tex->filename.data) {
+            fs::path tex_path = fbx_dir / UfbxUtil::FileNameFromUfbx(tex->filename);
+
+            // ファイルが実在する場合のみロードを試みる
+            if (fs::exists(tex_path)) {
+                hr = DirectX::CreateWICTextureFromFile(
+                    device,
+                    ctx,
+                    tex_path.wstring().c_str(),
+                    nullptr,
+                    out_srv.ReleaseAndGetAddressOf());
+            }
+        }
+
+        if (FAILED(hr)) {
+            out_srv.Reset();
+        }
+    }
 } // anonymous namespace
 
 FbxMesh::FbxMesh() = default;
@@ -611,133 +737,40 @@ bool FbxMesh::CreateEffectsAndTextures(
     const char* fbx_path,
     const ufbx_scene* /*scene*/)
 {
-    using namespace DirectX;
-    namespace fs = std::filesystem;
+    //============================================================
+    // 目的:
+    //   - BasicEffect / CommonStates / InputLayout を準備する
+    //   - 各 MeshPart のテクスチャ（SRV）を準備する
+    //
+    // 方針:
+    //   - device / ctx は引数で渡さず Gfx から取得する
+    //   - 失敗しても「そのパーツだけテクスチャ無し」で描画は継続する
+    //============================================================
 
-    //============================================================
-    // 1) D3D デバイス/コンテキスト取得
-    //============================================================
+    // 1) D3D デバイス/コンテキスト取得（ここが無いと何も作れない）
     ID3D11Device* device = Gfx::Dev();
     ID3D11DeviceContext* ctx = Gfx::Ctx();
     if (!device || !ctx) {
-        // 描画環境がまだ初期化されていない（または破棄済み）
         return false;
     }
 
-    //============================================================
-    // 2) CommonStates / BasicEffect の準備（無ければ作成）
-    //============================================================
-    if (!states_) {
-        states_.reset(new DirectX::DX11::CommonStates(device));
-    }
-    if (!fx_) {
-        fx_.reset(new DirectX::DX11::BasicEffect(device));
-    }
+    // 2) CommonStates / BasicEffect を必要なら生成
+    EnsureStatesAndEffect(device, states_, fx_);
 
-    //============================================================
-    // 3) BasicEffect の既定パラメータ設定
-    //    ※ここは「FBXごとの差が無い」固定の初期値を入れている
-    //============================================================
-    {
-        DirectX::BasicEffect* fx = fx_.get();
+    // 3) BasicEffect の既定パラメータ設定（固定値）
+    ConfigureDefaultBasicEffect(fx_.get());
 
-        fx->SetLightingEnabled(true);
-        fx->SetPerPixelLighting(true);
-
-        // 頂点カラーは使わず、テクスチャ/ライトで描く
-        fx->SetVertexColorEnabled(false);
-        fx->SetTextureEnabled(true);
-
-        // 環境光・拡散色
-        fx->SetAmbientLightColor({ 0.3f, 0.3f, 0.3f });
-        fx->SetDiffuseColor({ 1.0f, 1.0f, 1.0f, 1.0f });
-
-        // ライト0 を1本だけ有効化
-        fx->SetLightEnabled(0, true);
-        fx->SetLightDirection(0, { -0.5f, -1.0f, 0.3f });
-        fx->SetLightDiffuseColor(0, { 1.0f, 1.0f, 1.0f, 1.0f });
+    // 4) InputLayout を必要なら作成
+    if (!EnsureInputLayout(device, fx_.get(), layout_)) {
+        return false;
     }
 
-    //============================================================
-    // 4) InputLayout 作成（初回のみ）
-    //    VertexPNT2 のレイアウトに合わせる
-    //============================================================
-    if (!layout_) {
-        const void* bytecode = nullptr;
-        size_t      bytecode_size = 0;
-        fx_->GetVertexShaderBytecode(&bytecode, &bytecode_size);
+    // 5) 外部テクスチャ探索用に FBX のディレクトリを取得
+    const std::filesystem::path fbx_dir = GetFbxDirectory(fbx_path);
 
-        D3D11_INPUT_ELEMENT_DESC il[] =
-        {
-            { "SV_POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0,
-              (UINT)offsetof(VertexPNT2, pos), D3D11_INPUT_PER_VERTEX_DATA, 0 },
-            { "NORMAL",      0, DXGI_FORMAT_R32G32B32_FLOAT, 0,
-              (UINT)offsetof(VertexPNT2, nrm), D3D11_INPUT_PER_VERTEX_DATA, 0 },
-            { "TEXCOORD",    0, DXGI_FORMAT_R32G32_FLOAT,    0,
-              (UINT)offsetof(VertexPNT2, uv),  D3D11_INPUT_PER_VERTEX_DATA, 0 },
-        };
-
-        HRESULT hr = device->CreateInputLayout(
-            il, 3, bytecode, bytecode_size, layout_.GetAddressOf());
-        if (FAILED(hr)) {
-            return false;
-        }
-    }
-
-    //============================================================
-    // 5) FBX ファイルのディレクトリ（外部テクスチャ探索用）
-    //============================================================
-    fs::path fbx_dir;
-    if (fbx_path) {
-        const size_t len = std::strlen(fbx_path);
-        fbx_dir = UfbxUtil::PathFromUtf8(fbx_path, len).parent_path();
-    }
-
-    //============================================================
-    // 6) 各 MeshPart のテクスチャを読み込み、SRV を設定
-    //    失敗しても part.srv を空にして続行（ロード全体は止めない）
-    //============================================================
-    for (size_t i = 0; i < mesh_.parts_.size(); ++i) {
-        MeshPart& part = mesh_.parts_[i];
-
-        // マテリアルから Diffuse テクスチャを取得
-        const ufbx_texture* tex = UfbxUtil::GetDiffuseTexture(part.mat);
-        if (!tex) {
-            part.srv.Reset();
-            continue;
-        }
-
-        HRESULT hr = E_FAIL;
-
-        // (A) FBX 埋め込みテクスチャ（content）
-        if (tex->content.size > 0 && tex->content.data) {
-            hr = DirectX::CreateWICTextureFromMemory(
-                device,
-                ctx,
-                reinterpret_cast<const uint8_t*>(tex->content.data),
-                tex->content.size,
-                nullptr,
-                part.srv.ReleaseAndGetAddressOf());
-        }
-        // (B) 外部ファイル参照（filename）
-        else if (tex->filename.length > 0 && tex->filename.data) {
-            fs::path tex_path = fbx_dir / UfbxUtil::FileNameFromUfbx(tex->filename);
-
-            // ファイルが実在する場合のみロードを試みる
-            if (fs::exists(tex_path)) {
-                hr = DirectX::CreateWICTextureFromFile(
-                    device,
-                    ctx,
-                    tex_path.wstring().c_str(),
-                    nullptr,
-                    part.srv.ReleaseAndGetAddressOf());
-            }
-        }
-
-        // ロードできなければ「テクスチャ無し」として描画する
-        if (FAILED(hr)) {
-            part.srv.Reset();
-        }
+    // 6) MeshPart ごとのテクスチャ（SRV）を構築
+    for (auto& part : mesh_.parts_) {
+        BuildTextureForPart(device, ctx, fbx_dir, part.mat, part.srv);
     }
 
     return true;
