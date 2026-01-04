@@ -228,9 +228,22 @@ private:
 
 
     // ------------------------------------------------------------
-    // Draw() を工程分割するための補助（ラムダ無し）
-    // ※ private メンバにアクセスするため、FbxMesh の private メソッドとして定義する
+
     // ------------------------------------------------------------
+    // ExpandNode / ExpandAllNodes の共通処理
+    //   - apply_geo: node->geometry_to_world を頂点/法線に適用するか
+    //   - write_scene_radius: skeleton.Data().scene_radius_ を更新するか
+    // ------------------------------------------------------------
+    void ExpandNodesImpl(
+        const ufbx_scene* scene,
+        const std::vector<const ufbx_node*>& nodes,
+        FbxSkeleton& skeleton,
+        bool apply_geo,
+        bool write_scene_radius);
+
+    // Draw() を工程分割するための補助（ラムダ無し）
+       // ※ private メンバにアクセスするため、FbxMesh の private メソッドとして定義する
+       // ------------------------------------------------------------
     bool ValidateDrawResources(ID3D11DeviceContext* ctx) const;
 
     void UpdateSkinningIfNeeded(

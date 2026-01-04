@@ -22,6 +22,213 @@
 
 using Microsoft::WRL::ComPtr;
 
+
+namespace FbxMeshBuild
+{
+    // NOTE:
+    // - FbxMesh.cpp 内部専用の補助関数群をまとめる名前空間。
+    // - FbxMesh クラスの private メンバに触れない「純粋な部品」に限定する。
+    // - DirectXTK の WICTextureLoader は（環境によって）DeviceContext を取らない版があるため、
+    //   ここでは "device だけ" のオーバーロードに合わせる。
+
+    // ------------------------------------------------------------
+    // FBX ファイルの置かれているディレクトリを返す
+    // ------------------------------------------------------------
+    // ------------------------------------------------------------
+    // FBX ファイルの置かれているディレクトリを返す
+    // ------------------------------------------------------------
+    std::filesystem::path GetFbxDirectory(const char* fbx_path)
+    {
+        std::filesystem::path fbx_dir;
+
+        if (fbx_path) {
+            const size_t len = std::strlen(fbx_path);
+            fbx_dir = UfbxUtil::PathFromUtf8(fbx_path, len).parent_path();
+        }
+
+        return fbx_dir;
+    }
+
+    // ------------------------------------------------------------
+    // 基準 UV セットを選ぶ（ひとまず 1つ目の UV を採用）
+    //   - mesh->vertex_uv があればそれを返す
+    //   - 無ければ mesh->uv_sets[0].vertex_uv があればそれを返す
+    //   - どちらも無ければ nullptr
+    // ------------------------------------------------------------
+    const ufbx_vertex_vec2* ChooseBaseUVSet(const ufbx_mesh* mesh)
+    {
+        if (!mesh) {
+            return nullptr;
+        }
+
+        if (mesh->vertex_uv.exists) {
+            return &mesh->vertex_uv;
+        }
+
+        if (mesh->uv_sets.count > 0 &&
+            mesh->uv_sets.data[0].vertex_uv.exists)
+        {
+            return &mesh->uv_sets.data[0].vertex_uv;
+        }
+
+        return nullptr;
+    }// ------------------------------------------------------------
+// 面（face）をマテリアル単位に分類する
+// ------------------------------------------------------------
+    std::unordered_map<uint32_t, std::vector<uint32_t>> BuildFacesByMaterial(
+        const ufbx_mesh* mesh)
+    {
+        std::unordered_map<uint32_t, std::vector<uint32_t>> faces_by_mat;
+        if (!mesh) {
+            return faces_by_mat;
+        }
+
+        for (uint32_t fi = 0; fi < (uint32_t)mesh->faces.count; ++fi) {
+            uint32_t mi =
+                (mesh->face_material.count > 0) ?
+                mesh->face_material.data[fi] : 0;
+            faces_by_mat[mi].push_back(fi);
+        }
+
+        return faces_by_mat;
+    }
+
+    // CommonStates / BasicEffect を必要なら生成する
+    // ------------------------------------------------------------
+    void EnsureStatesAndEffect(
+        ID3D11Device* device,
+        std::unique_ptr<DirectX::DX11::CommonStates>& states,
+        std::unique_ptr<DirectX::DX11::BasicEffect>& fx)
+    {
+        if (!states) {
+            states.reset(new DirectX::DX11::CommonStates(device));
+        }
+        if (!fx) {
+            fx.reset(new DirectX::DX11::BasicEffect(device));
+        }
+    }
+
+    // ------------------------------------------------------------
+    // BasicEffect の既定パラメータを設定する
+    // ------------------------------------------------------------
+    void ConfigureDefaultBasicEffect(DirectX::DX11::BasicEffect* fx)
+    {
+        if (!fx) return;
+
+        // 照明あり / 1 つ目のライトを有効化
+        fx->SetLightingEnabled(true);
+        fx->SetPerPixelLighting(true);
+
+        // 頂点カラーは使わない（PNT2 のみ）
+        fx->SetVertexColorEnabled(false);
+
+        // テクスチャは MeshPart の SRV がある場合のみ有効化する
+        fx->SetTextureEnabled(true);
+
+        // 環境光・拡散色（最低限見えるように固定値）
+        fx->SetAmbientLightColor({ 0.3f, 0.3f, 0.3f });
+        fx->SetDiffuseColor({ 1.0f, 1.0f, 1.0f, 1.0f });
+
+        // ライト 0
+        fx->SetLightEnabled(0, true);
+        fx->SetLightDirection(0, { -0.5f, -1.0f, 0.3f });
+        fx->SetLightDiffuseColor(0, { 1.0f, 1.0f, 1.0f, 1.0f });
+    }
+
+    // ------------------------------------------------------------
+    // InputLayout を必要なら作成する（PNT2 用）
+    // ------------------------------------------------------------
+    bool EnsureInputLayout(
+        ID3D11Device* device,
+        DirectX::DX11::BasicEffect* fx,
+        Microsoft::WRL::ComPtr<ID3D11InputLayout>& layout)
+    {
+        if (layout) {
+            return true;
+        }
+        if (!device || !fx) {
+            return false;
+        }
+
+        const void* bc = nullptr;
+        size_t      sz = 0;
+        fx->GetVertexShaderBytecode(&bc, &sz);
+
+        D3D11_INPUT_ELEMENT_DESC il[] =
+        {
+            { "SV_POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0,
+              (UINT)offsetof(FbxMesh::VertexPNT2, pos), D3D11_INPUT_PER_VERTEX_DATA, 0 },
+
+            { "NORMAL",      0, DXGI_FORMAT_R32G32B32_FLOAT, 0,
+              (UINT)offsetof(FbxMesh::VertexPNT2, nrm), D3D11_INPUT_PER_VERTEX_DATA, 0 },
+
+            { "TEXCOORD",    0, DXGI_FORMAT_R32G32_FLOAT,    0,
+              (UINT)offsetof(FbxMesh::VertexPNT2, uv),  D3D11_INPUT_PER_VERTEX_DATA, 0 },
+        };
+
+        HRESULT hr = device->CreateInputLayout(
+            il, 3, bc, sz, layout.ReleaseAndGetAddressOf());
+
+        return SUCCEEDED(hr);
+    }
+
+    // ------------------------------------------------------------
+    // 1 パーツ分のテクスチャ SRV を作る
+    //   - FBX 内に埋め込みがあればメモリから
+    //   - 外部参照なら fbx_dir から相対パスで探す
+    //   - 失敗時は out_srv を Reset() して「テクスチャ無し」で描画を継続する
+    // ------------------------------------------------------------
+    void BuildTextureForPart(
+        ID3D11Device* device,
+        const std::filesystem::path& fbx_dir,
+        const ufbx_material* mat,
+        Microsoft::WRL::ComPtr<ID3D11ShaderResourceView>& out_srv)
+    {
+        out_srv.Reset();
+
+        if (!device) {
+            return;
+        }
+
+        const ufbx_texture* tex = UfbxUtil::GetDiffuseTexture(mat);
+        if (!tex) {
+            return;
+        }
+
+        HRESULT hr = E_FAIL;
+
+        // 1) FBX 埋め込みテクスチャ（メモリ）
+        if (tex->content.size > 0 && tex->content.data) {
+            hr = DirectX::CreateWICTextureFromMemory(
+                device,
+                reinterpret_cast<const uint8_t*>(tex->content.data),
+                tex->content.size,
+                nullptr,
+                out_srv.ReleaseAndGetAddressOf());
+        }
+        // 2) 外部参照テクスチャ（ファイル）
+        else if (tex->filename.length > 0 && tex->filename.data) {
+            const std::filesystem::path tex_path =
+                fbx_dir / UfbxUtil::FileNameFromUfbx(tex->filename);
+
+            if (std::filesystem::exists(tex_path)) {
+                hr = DirectX::CreateWICTextureFromFile(
+                    device,
+                    tex_path.wstring().c_str(),
+                    nullptr,
+                    out_srv.ReleaseAndGetAddressOf());
+            }
+        }
+
+        if (FAILED(hr)) {
+            out_srv.Reset();
+        }
+    }
+
+} // namespace FbxMeshBuild
+
+
+
 //------------------------------------------------------------
 // BuildInternal 用の一時コンテキスト
 //------------------------------------------------------------
@@ -34,6 +241,84 @@ struct BuildContext
     // ノードのジオメトリ変換（geometry_to_world）。無ければ Identity。
     DirectX::XMMATRIX geo = DirectX::XMMatrixIdentity();
 };
+
+namespace FbxMeshBuild
+{
+    // ExpandNode 用: 単一ノードを配列化する（挙動不変のまま整理）
+    inline std::vector<const ufbx_node*> MakeSingleNodeList(const ufbx_node* node)
+    {
+        std::vector<const ufbx_node*> nodes;
+        nodes.push_back(node);
+        return nodes;
+    }
+
+    // ExpandAllNodes 用: scene の全ノードを配列化する（挙動不変のまま整理）
+    inline std::vector<const ufbx_node*> MakeSceneNodeList(const ufbx_scene* scene)
+    {
+        std::vector<const ufbx_node*> nodes;
+        nodes.reserve(scene->nodes.count);
+
+        for (size_t i = 0; i < scene->nodes.count; ++i) {
+            nodes.push_back(scene->nodes.data[i]);
+        }
+        return nodes;
+    }
+
+
+    // ExpandNodesImpl 用: mesh 展開結果をクリアする（挙動不変）
+    inline void ClearExpandedMeshData(FbxMesh::MeshData& mesh)
+    {
+        mesh.vertices_.clear();
+        mesh.indices_.clear();
+        mesh.parts_.clear();
+        mesh.influences_.clear();
+        mesh.bind_vertices_.clear();
+        mesh.skinned_vertices_.clear();
+    }
+
+    // ExpandNodesImpl 用: 境界情報をリセットする（挙動不変）
+    inline void ResetBounds(BVolume& bounds)
+    {
+        bounds.Reset();
+    }
+
+
+    // ExpandNodesImpl 用: Skeleton 側の「ボーンノード→インデックス」辞書を参照する（型を固定しない）
+    inline decltype(auto) GetBoneIndexMap(FbxSkeleton& skeleton)
+    {
+        return skeleton.Data().bone_index_of_;
+    }
+
+    // ExpandNodesImpl 用: スキニング有無フラグをリセットする（挙動不変）
+    inline void ResetHasSkinningFlag(bool& has_skinning)
+    {
+        has_skinning = false;
+    }
+
+    // ExpandNodesImpl 用: シーン半径を書き込む（挙動不変）
+    inline void WriteSceneRadiusIfNeeded(
+        FbxSkeleton& skeleton,
+        float radius,
+        bool write_scene_radius)
+    {
+        if (write_scene_radius) {
+            skeleton.Data().scene_radius_ = radius;
+        }
+    }
+
+
+    // ExpandNodesImpl 用: バインド頂点/スキン頂点を初期化する（挙動不変）
+    inline void InitBindAndSkinnedVertices(FbxMesh::MeshData& mesh)
+    {
+        mesh.bind_vertices_ = mesh.vertices_;
+        mesh.skinned_vertices_ = mesh.vertices_;
+    }
+
+
+
+
+}
+
 
 namespace
 {
@@ -142,132 +427,6 @@ namespace
             }
         }
         return uvv;
-    }
-    fs::path GetFbxDirectory(const char* fbx_path)
-    {
-        fs::path dir;
-        if (fbx_path) {
-            const size_t len = std::strlen(fbx_path);
-            dir = UfbxUtil::PathFromUtf8(fbx_path, len).parent_path();
-        }
-        return dir;
-    }
-
-    // ------------------------------------------------------------
-    // CommonStates / BasicEffect を必要なら生成する
-    //   ※ device は Gfx から取得したものを渡す（nullptr は呼び出し側で弾く）
-    // ------------------------------------------------------------
-    void EnsureStatesAndEffect(
-        ID3D11Device* device,
-        std::unique_ptr<DirectX::DX11::CommonStates>& states,
-        std::unique_ptr<DirectX::DX11::BasicEffect>& fx)
-    {
-        if (!states) {
-            states.reset(new DirectX::DX11::CommonStates(device));
-        }
-        if (!fx) {
-            fx.reset(new DirectX::DX11::BasicEffect(device));
-        }
-    }
-
-    // ------------------------------------------------------------
-    // BasicEffect に「固定の既定値」を設定する
-    //   ※ FBX ごとの差が無いライト/色などの初期値
-    // ------------------------------------------------------------
-    void ConfigureDefaultBasicEffect(DirectX::BasicEffect* fx)
-    {
-        fx->SetLightingEnabled(true);
-        fx->SetPerPixelLighting(true);
-
-        // 頂点カラーは使わず、テクスチャ/ライトで描く
-        fx->SetVertexColorEnabled(false);
-        fx->SetTextureEnabled(true);
-
-        // 環境光・拡散色
-        fx->SetAmbientLightColor({ 0.3f, 0.3f, 0.3f });
-        fx->SetDiffuseColor({ 1.0f,  1.0f,  1.0f, 1.0f });
-
-        // ライト0 を1本だけ有効化
-        fx->SetLightEnabled(0, true);
-        fx->SetLightDirection(0, { -0.5f, -1.0f, 0.3f });
-        fx->SetLightDiffuseColor(0, { 1.0f, 1.0f, 1.0f, 1.0f });
-    }
-
-    // ------------------------------------------------------------
-    // VertexPNT2 用の InputLayout を必要なら生成する
-    // ------------------------------------------------------------
-    bool EnsureInputLayout(
-        ID3D11Device* device,
-        DirectX::BasicEffect* fx,
-        Microsoft::WRL::ComPtr<ID3D11InputLayout>& layout)
-    {
-        if (layout) return true;
-
-        const void* bytecode = nullptr;
-        size_t      bytecode_size = 0;
-        fx->GetVertexShaderBytecode(&bytecode, &bytecode_size);
-
-        D3D11_INPUT_ELEMENT_DESC il[] =
-        {
-            { "SV_POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0,
-              (UINT)offsetof(FbxMesh::VertexPNT2, pos), D3D11_INPUT_PER_VERTEX_DATA, 0 },
-            { "NORMAL",      0, DXGI_FORMAT_R32G32B32_FLOAT, 0,
-              (UINT)offsetof(FbxMesh::VertexPNT2, nrm), D3D11_INPUT_PER_VERTEX_DATA, 0 },
-            { "TEXCOORD",    0, DXGI_FORMAT_R32G32_FLOAT,    0,
-              (UINT)offsetof(FbxMesh::VertexPNT2, uv),  D3D11_INPUT_PER_VERTEX_DATA, 0 },
-        };
-
-        HRESULT hr = device->CreateInputLayout(
-            il, 3, bytecode, bytecode_size, layout.ReleaseAndGetAddressOf());
-        return SUCCEEDED(hr);
-    }
-
-    // ------------------------------------------------------------
-    // 1つの MeshPart に対して SRV を作る（埋め込み / 外部ファイル）
-    //   失敗したら out_srv は Reset() される
-    // ------------------------------------------------------------
-    void BuildTextureForPart(
-        ID3D11Device* device,
-        ID3D11DeviceContext* ctx,
-        const fs::path& fbx_dir,
-        const ufbx_material* mat,
-        Microsoft::WRL::ComPtr<ID3D11ShaderResourceView>& out_srv)
-    {
-        out_srv.Reset();
-
-        const ufbx_texture* tex = UfbxUtil::GetDiffuseTexture(mat);
-        if (!tex) return;
-
-        HRESULT hr = E_FAIL;
-
-        // (A) FBX 埋め込みテクスチャ（content）
-        if (tex->content.size > 0 && tex->content.data) {
-            hr = DirectX::CreateWICTextureFromMemory(
-                device,
-                ctx,
-                reinterpret_cast<const uint8_t*>(tex->content.data),
-                tex->content.size,
-                nullptr,
-                out_srv.ReleaseAndGetAddressOf());
-        }
-        // (B) 外部ファイル参照（filename）
-        else if (tex->filename.length > 0 && tex->filename.data) {
-            fs::path tex_path = fbx_dir / UfbxUtil::FileNameFromUfbx(tex->filename);
-
-            // ファイルが実在する場合のみロードを試みる
-            if (fs::exists(tex_path)) {
-                hr = DirectX::CreateWICTextureFromFile(
-                    device,
-                    ctx,
-                    tex_path.wstring().c_str(),
-                    nullptr,
-                    out_srv.ReleaseAndGetAddressOf());
-            }
-        }
-
-        if (FAILED(hr)) {
-            out_srv.Reset();
-        }
     }
 } // anonymous namespace
 
@@ -407,198 +566,75 @@ bool FbxMesh::BuildFromNode(const ufbx_scene* scene,
 // ExpandNode (CPU 展開): node 1つのメッシュを展開
 //   ※用途：1ノードだけ読みたい場合
 //================================================================
-void FbxMesh::ExpandNode(const ufbx_scene* scene,
-    const ufbx_node* node,
-    FbxSkeleton& skeleton)
+//================================================================
+// ExpandNode (CPU): node 1つだけ展開
+//================================================================
+//================================================================
+// ExpandNodesImpl (CPU): ExpandNode / ExpandAllNodes 共通
+//   apply_geo:
+//     true  -> node->geometry_to_world を頂点/法線へ適用（ExpandNode と同じ）
+//     false -> 適用しない（ExpandAllNodes と同じ）
+//   write_scene_radius:
+//     true  -> skeleton.Data().scene_radius_ を bounds_.radius で更新（ExpandAllNodes と同じ）
+//================================================================
+void FbxMesh::ExpandNodesImpl(
+    const ufbx_scene* scene,
+    const std::vector<const ufbx_node*>& nodes,
+    FbxSkeleton& skeleton,
+    bool apply_geo,
+    bool write_scene_radius)
 {
     using namespace DirectX;
 
-    // SNA
-    mesh_.vertices_.clear();
-    mesh_.indices_.clear();
-    mesh_.parts_.clear();
-    mesh_.influences_.clear();
-    mesh_.bind_vertices_.clear();
-    mesh_.skinned_vertices_.clear();
+    if (!scene) return;
 
-    // oEfBO{bNX
-    bounds_.Reset();
+    // -----------------------------
+    // 1) 前回データをクリア
+    // -----------------------------
+    FbxMeshBuild::ClearExpandedMeshData(mesh_);
 
-    // Skeleton のボーン→インデックス表
-    const auto& bone_index_map = skeleton.Data().bone_index_of_;
+    // -----------------------------
+    // 2) 境界情報をリセット
+    // -----------------------------
+    FbxMeshBuild::ResetBounds(bounds_);
 
-    has_skinning_ = false;
+    // Skeleton 側の「ボーンノード→インデックス」辞書（スキニング用）
+    const auto& bone_index_map = FbxMeshBuild::GetBoneIndexMap(skeleton);
 
-    const ufbx_mesh* mesh = node->mesh;
-    if (!mesh) return;
+    FbxMeshBuild::ResetHasSkinningFlag(has_skinning_);
 
-    if (mesh->skin_deformers.count > 0) {
-        has_skinning_ = true;
-    }
+    // -----------------------------
+    // 3) 指定ノード群を展開
+    // -----------------------------
+    for (const ufbx_node* node : nodes) {
+        if (!node) continue;
 
-    // 頂点ごとの影響（最大4）
-    std::vector<VertexInfluence> infl_per_vtx;
-    BuildInfluencesForMesh(mesh, bone_index_map, infl_per_vtx);
-
-    // 基準 UV セット（ひとまず 1つ目を採用）
-    const ufbx_vertex_vec2* base_uv = nullptr;
-    if (mesh->vertex_uv.exists) {
-        base_uv = &mesh->vertex_uv;
-    }
-    else if (mesh->uv_sets.count > 0 &&
-        mesh->uv_sets.data[0].vertex_uv.exists)
-    {
-        base_uv = &mesh->uv_sets.data[0].vertex_uv;
-    }
-
-    // マテリアル別に面（face）をグループ化
-    std::unordered_map<uint32_t, std::vector<uint32_t>> faces_by_mat;
-    for (uint32_t fi = 0; fi < (uint32_t)mesh->faces.count; ++fi) {
-        uint32_t mi =
-            (mesh->face_material.count > 0) ?
-            mesh->face_material.data[fi] : 0;
-        faces_by_mat[mi].push_back(fi);
-    }
-
-    // マテリアルごとに MeshPart を生成
-    for (auto& kv : faces_by_mat) {
-        uint32_t                     mat_index = kv.first;
-        const std::vector<uint32_t>& face_list = kv.second;
-
-        MeshPart part;
-        part.mat = nullptr;
-        part.start_index = (uint32_t)mesh_.indices_.size();
-
-        // マテリアル参照（node / mesh のどちらかから取得）
-        {
-            const ufbx_material* mat = nullptr;
-            if (node && node->materials.count > mat_index &&
-                node->materials.data[mat_index])
-            {
-                mat = node->materials.data[mat_index];
-            }
-            else if (mesh && mesh->materials.count > mat_index) {
-                mat = mesh->materials.data[mat_index];
-            }
-            part.mat = mat;
-        }
-
-        // テクスチャが指定する UV セットを選択
-        const ufbx_vertex_vec2* uvv =
-            ChooseUVSet(mesh, part.mat, base_uv);
-
-        // このマテリアル用のビルドコンテキスト
-        BuildContext ctx;
-        ctx.mesh = mesh;
-        ctx.uvv = uvv;
-        ctx.infl_per_vtx = &infl_per_vtx;
-
-        {
-            DirectX::XMFLOAT4X4 m = UfbxUtil::ToXMMatrix(node->geometry_to_world);
-            ctx.geo = DirectX::XMLoadFloat4x4(&m);
-        }
-
-        {
-            DirectX::XMFLOAT4X4 m = UfbxUtil::ToXMMatrix(node->geometry_to_world);
-            ctx.geo = DirectX::XMLoadFloat4x4(&m);
-        }
-
-        // 面を三角形に分割（ファン）して頂点を生成
-        for (uint32_t f_index : face_list) {
-            const ufbx_face f = mesh->faces.data[f_index];
-            if (f.num_indices < 3) continue;
-
-            // 先頭頂点を固定して (0, k+1, k+2) の三角形に分割
-            for (uint32_t k = 0; k + 2 < f.num_indices; ++k) {
-                uint32_t corners[3] = {
-                    f.index_begin + 0,
-                    f.index_begin + (k + 1),
-                    f.index_begin + (k + 2),
-                };
-
-                for (int c = 0; c < 3; ++c) {
-                    uint32_t corner = corners[c];
-                    uint32_t vtx = mesh->vertex_indices.data[corner];
-
-                    EmitCorner(ctx, corner, vtx);
-                }
-            }
-        }
-
-        // MeshPart 確定（インデックス範囲）
-        part.index_count =
-            (uint32_t)mesh_.indices_.size() - part.start_index;
-        if (part.index_count > 0) {
-            mesh_.parts_.push_back(part);
-        }
-    }
-
-    // 境界球を更新
-    bounds_.RecalcSphereFromAABB();
-
-    // バインド頂点 / スキン頂点を初期化
-    mesh_.bind_vertices_ = mesh_.vertices_;
-    mesh_.skinned_vertices_ = mesh_.vertices_;
-}
-
-//================================================================
-// bVWJiCPUj
-//================================================================
-void FbxMesh::ExpandAllNodes(const ufbx_scene* scene,
-    FbxSkeleton& skeleton)
-{
-    using namespace DirectX;
-
-    // SNA
-    mesh_.vertices_.clear();
-    mesh_.indices_.clear();
-    mesh_.parts_.clear();
-    mesh_.influences_.clear();
-    mesh_.bind_vertices_.clear();
-    mesh_.skinned_vertices_.clear();
-
-    // oEfBO{bNX
-    bounds_.Reset();
-
-    // Skeleton のボーン→インデックス表
-    const auto& bone_index_map = skeleton.Data().bone_index_of_;
-
-    has_skinning_ = false;
-    // シーン内の全ノードを走査して、メッシュを展開
-    for (size_t ni = 0; ni < scene->nodes.count; ++ni) {
-        const ufbx_node* node = scene->nodes.data[ni];
         const ufbx_mesh* mesh = node->mesh;
         if (!mesh) continue;
 
+        // スキニングの有無（シーン全体として1つでもあれば true）
         if (mesh->skin_deformers.count > 0) {
             has_skinning_ = true;
         }
 
-        // 頂点ごとの影響（最大4）
+        // -----------------------------------------
+        // 3-1) 頂点ごとの影響（ボーン/ウェイト）を構築
+        // -----------------------------------------
         std::vector<VertexInfluence> infl_per_vtx;
         BuildInfluencesForMesh(mesh, bone_index_map, infl_per_vtx);
 
-        // 基準 UV セット（ひとまず 1つ目を採用）
-        const ufbx_vertex_vec2* base_uv = nullptr;
-        if (mesh->vertex_uv.exists) {
-            base_uv = &mesh->vertex_uv;
-        }
-        else if (mesh->uv_sets.count > 0 &&
-            mesh->uv_sets.data[0].vertex_uv.exists)
-        {
-            base_uv = &mesh->uv_sets.data[0].vertex_uv;
-        }
+        // -----------------------------------------
+        // 3-2) UV セット（基本は最初のUV）
+        // -----------------------------------------
+        const ufbx_vertex_vec2* base_uv = FbxMeshBuild::ChooseBaseUVSet(mesh);
+        // -----------------------------------------
+                // 3-3) 面をマテリアル単位に分類
+                // -----------------------------------------
+        auto faces_by_mat = FbxMeshBuild::BuildFacesByMaterial(mesh);
 
-        // マテリアル別に面（face）をグループ化
-        std::unordered_map<uint32_t, std::vector<uint32_t>> faces_by_mat;
-        for (uint32_t fi = 0; fi < (uint32_t)mesh->faces.count; ++fi) {
-            uint32_t mi =
-                (mesh->face_material.count > 0) ?
-                mesh->face_material.data[fi] : 0;
-            faces_by_mat[mi].push_back(fi);
-        }
-
-        // マテリアルごとに MeshPart を生成
+        // -----------------------------------------
+                // 3-4) マテリアルごとに MeshPart を作って頂点を吐く
+                // -----------------------------------------
         for (auto& kv : faces_by_mat) {
             uint32_t                     mat_index = kv.first;
             const std::vector<uint32_t>& face_list = kv.second;
@@ -607,36 +643,41 @@ void FbxMesh::ExpandAllNodes(const ufbx_scene* scene,
             part.mat = nullptr;
             part.start_index = (uint32_t)mesh_.indices_.size();
 
-            // マテリアル参照（node / mesh のどちらかから取得）
+            // マテリアル取得（node 優先、無ければ mesh）
             {
                 const ufbx_material* mat = nullptr;
-                if (node && node->materials.count > mat_index &&
+                if (node->materials.count > mat_index &&
                     node->materials.data[mat_index])
                 {
                     mat = node->materials.data[mat_index];
                 }
-                else if (mesh && mesh->materials.count > mat_index) {
+                else if (mesh->materials.count > mat_index) {
                     mat = mesh->materials.data[mat_index];
                 }
                 part.mat = mat;
             }
 
-            // テクスチャが指定する UV セットを選択
+            // テクスチャに指定された UVSet 名があるならそちらを使う
             const ufbx_vertex_vec2* uvv =
                 ChooseUVSet(mesh, part.mat, base_uv);
 
-            // このマテリアル用のビルドコンテキスト
+            // EmitCorner() に渡すコンテキスト
             BuildContext ctx;
             ctx.mesh = mesh;
             ctx.uvv = uvv;
             ctx.infl_per_vtx = &infl_per_vtx;
 
-            // 面を三角形に分割（ファン）して頂点を生成
+            // ExpandNode と同じ挙動：node の geometry_to_world を適用
+            if (apply_geo) {
+                DirectX::XMFLOAT4X4 m = UfbxUtil::ToXMMatrix(node->geometry_to_world);
+                ctx.geo = DirectX::XMLoadFloat4x4(&m);
+            }
+
+            // face -> triangle fan で三角形化して吐く
             for (uint32_t f_index : face_list) {
                 const ufbx_face f = mesh->faces.data[f_index];
                 if (f.num_indices < 3) continue;
 
-                // 先頭頂点を固定して (0, k+1, k+2) の三角形に分割
                 for (uint32_t k = 0; k + 2 < f.num_indices; ++k) {
                     uint32_t corners[3] = {
                         f.index_begin + 0,
@@ -647,13 +688,12 @@ void FbxMesh::ExpandAllNodes(const ufbx_scene* scene,
                     for (int c = 0; c < 3; ++c) {
                         uint32_t corner = corners[c];
                         uint32_t vtx = mesh->vertex_indices.data[corner];
-
                         EmitCorner(ctx, corner, vtx);
                     }
                 }
             }
 
-            // MeshPart 確定（インデックス範囲）
+            // このパーツのインデックス数を確定
             part.index_count =
                 (uint32_t)mesh_.indices_.size() - part.start_index;
             if (part.index_count > 0) {
@@ -662,16 +702,49 @@ void FbxMesh::ExpandAllNodes(const ufbx_scene* scene,
         }
     }
 
-    // 境界球を更新
+    // -----------------------------
+    // 4) 境界（AABB→Sphere）を確定
+    // -----------------------------
     bounds_.RecalcSphereFromAABB();
 
-    // シーン半径をスケルトン側にも記録（カメラ距離などの判断に使う想定）
-    skeleton.Data().scene_radius_ = bounds_.radius;
+    // ExpandAllNodes と同じ挙動：シーン半径を skeleton 側に保存
+    FbxMeshBuild::WriteSceneRadiusIfNeeded(skeleton, bounds_.radius, write_scene_radius);
 
-    // バインド頂点 / スキン頂点を初期化
-    mesh_.bind_vertices_ = mesh_.vertices_;
-    mesh_.skinned_vertices_ = mesh_.vertices_;
+    // -----------------------------
+    // 5) スキニング用のバインド/作業頂点を初期化
+    // -----------------------------
+    FbxMeshBuild::InitBindAndSkinnedVertices(mesh_);
 }
+
+void FbxMesh::ExpandNode(const ufbx_scene* scene,
+    const ufbx_node* node,
+    FbxSkeleton& skeleton)
+{
+    // ExpandNode は geometry_to_world を適用する
+    const std::vector<const ufbx_node*> nodes = FbxMeshBuild::MakeSingleNodeList(node);
+    ExpandNodesImpl(scene, nodes, skeleton, true, false);
+}
+
+
+//================================================================
+// bVWJiCPUj
+//================================================================
+//================================================================
+// ExpandAllNodes (CPU): scene 内の全メッシュノードを展開
+//================================================================
+void FbxMesh::ExpandAllNodes(const ufbx_scene* scene,
+    FbxSkeleton& skeleton)
+
+{
+    if (!scene) return;
+
+    std::vector<const ufbx_node*> nodes = FbxMeshBuild::MakeSceneNodeList(scene);
+
+    // ExpandAllNodes は geometry_to_world を適用しない（従来どおり）
+    // さらに scene_radius_ を更新する（従来どおり）
+    ExpandNodesImpl(scene, nodes, skeleton, false, true);
+}
+
 
 //================================================================
 //================================================================
@@ -728,53 +801,65 @@ bool FbxMesh::CreateGpuBuffers()
     return true;
 }
 
+bool FbxMesh::CreateEffectsAndTextures(
+    const char* fbx_path,
+    const ufbx_scene* /*scene*/)
+{
+    //================================================================
+    // CreateEffectsAndTextures
+    //
+    // 役割:
+    //   1) BasicEffect / CommonStates / InputLayout の準備
+    //   2) MeshPart ごとのテクスチャ(SRV)の読み込み
+    //
+    // 方針:
+    //   - device/context は Gfx から取得する（引数では渡さない）
+    //   - テクスチャ読み込みに失敗しても、そのパーツだけ無地で描画を継続する
+    //================================================================
+
+
+    // [1] D3D デバイス/コンテキスト取得
+    ID3D11Device* device = Gfx::Dev();
+    if (!device) {
+        return false;
+    }
+
+    using namespace FbxMeshBuild;
+
+
+
+    // [2] CommonStates / BasicEffect を必要なら生成（再利用する）
+    FbxMeshBuild::EnsureStatesAndEffect(device, states_, fx_);
+
+
+    // [3] BasicEffect の既定パラメータを設定（固定値）
+    FbxMeshBuild::ConfigureDefaultBasicEffect(fx_.get());
+
+
+    // [4] InputLayout を必要なら作成
+    if (!FbxMeshBuild::EnsureInputLayout(device, fx_.get(), layout_)) {
+        return false;
+    }
+
+
+    // [5] 外部テクスチャ探索用に、FBX ファイルのディレクトリを取得
+    const std::filesystem::path fbx_dir = FbxMeshBuild::GetFbxDirectory(fbx_path);
+
+
+    // [6] MeshPart ごとにテクスチャ(SRV)を構築
+    for (auto& part : mesh_.parts_) {
+        FbxMeshBuild::BuildTextureForPart(device, fbx_dir, part.mat, part.srv);
+    }
+
+    return true;
+}
+
+
 //================================================================
 //================================================================
 // エフェクト・テクスチャ作成
 //================================================================
 //================================================================
-bool FbxMesh::CreateEffectsAndTextures(
-    const char* fbx_path,
-    const ufbx_scene* /*scene*/)
-{
-    //============================================================
-    // 目的:
-    //   - BasicEffect / CommonStates / InputLayout を準備する
-    //   - 各 MeshPart のテクスチャ（SRV）を準備する
-    //
-    // 方針:
-    //   - device / ctx は引数で渡さず Gfx から取得する
-    //   - 失敗しても「そのパーツだけテクスチャ無し」で描画は継続する
-    //============================================================
-
-    // 1) D3D デバイス/コンテキスト取得（ここが無いと何も作れない）
-    ID3D11Device* device = Gfx::Dev();
-    ID3D11DeviceContext* ctx = Gfx::Ctx();
-    if (!device || !ctx) {
-        return false;
-    }
-
-    // 2) CommonStates / BasicEffect を必要なら生成
-    EnsureStatesAndEffect(device, states_, fx_);
-
-    // 3) BasicEffect の既定パラメータ設定（固定値）
-    ConfigureDefaultBasicEffect(fx_.get());
-
-    // 4) InputLayout を必要なら作成
-    if (!EnsureInputLayout(device, fx_.get(), layout_)) {
-        return false;
-    }
-
-    // 5) 外部テクスチャ探索用に FBX のディレクトリを取得
-    const std::filesystem::path fbx_dir = GetFbxDirectory(fbx_path);
-
-    // 6) MeshPart ごとのテクスチャ（SRV）を構築
-    for (auto& part : mesh_.parts_) {
-        BuildTextureForPart(device, ctx, fbx_dir, part.mat, part.srv);
-    }
-
-    return true;
-}
 
 //================================================================
 // CPU スキニング（頂点ごとの影響とスキン行列からスキン後頂点を生成）
@@ -1006,7 +1091,9 @@ void FbxMesh::Draw(
     //   - ラムダは使わない（工程は名前付き関数にする）
     //============================================================
 
+    // 0) D3D コンテキスト取得（描画に必須）
     ID3D11DeviceContext* ctx = Gfx::Ctx();
+
     if (!ValidateDrawResources(ctx)) {
         return;
     }
