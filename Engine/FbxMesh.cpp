@@ -72,7 +72,9 @@ namespace FbxMeshBuild
         }
 
         return nullptr;
-    }// ------------------------------------------------------------
+    }
+
+// ------------------------------------------------------------
 // 面（face）をマテリアル単位に分類する
 // ------------------------------------------------------------
     std::unordered_map<uint32_t, std::vector<uint32_t>> BuildFacesByMaterial(
@@ -92,6 +94,30 @@ namespace FbxMeshBuild
 
         return faces_by_mat;
     }
+
+    // ------------------------------------------------------------
+    // マテリアル取得（node 優先、無ければ mesh）
+    // ------------------------------------------------------------
+    const ufbx_material* ResolveMaterialForPart(
+        const ufbx_node* node,
+        const ufbx_mesh* mesh,
+        uint32_t mat_index)
+    {
+        const ufbx_material* mat = nullptr;
+        if (node &&
+            node->materials.count > mat_index &&
+            node->materials.data[mat_index])
+        {
+            mat = node->materials.data[mat_index];
+        }
+        else if (mesh &&
+            mesh->materials.count > mat_index)
+        {
+            mat = mesh->materials.data[mat_index];
+        }
+        return mat;
+    }
+
 
     // CommonStates / BasicEffect を必要なら生成する
     // ------------------------------------------------------------
@@ -306,6 +332,28 @@ namespace FbxMeshBuild
         }
     }
 
+    // ExpandNodesImpl 用: BuildContext を初期化する（挙動不変）
+    inline BuildContext MakeBuildContext(
+        const ufbx_node* node,
+        const ufbx_mesh* mesh,
+        const ufbx_vertex_vec2* uvv,
+        const std::vector<FbxMesh::VertexInfluence>* infl_per_vtx,
+        bool apply_geo)
+    {
+        BuildContext ctx;
+        ctx.mesh = mesh;
+        ctx.uvv = uvv;
+        ctx.infl_per_vtx = infl_per_vtx;
+
+        // ExpandNode と同じ挙動：node の geometry_to_world を適用
+        if (apply_geo && node) {
+            DirectX::XMFLOAT4X4 mtx = UfbxUtil::ToXMMatrix(node->geometry_to_world);
+            ctx.geo = DirectX::XMLoadFloat4x4(&mtx);
+        }
+        return ctx;
+    }
+
+
 
     // ExpandNodesImpl 用: バインド頂点/スキン頂点を初期化する（挙動不変）
     inline void InitBindAndSkinnedVertices(FbxMesh::MeshData& mesh)
@@ -508,6 +556,41 @@ void FbxMesh::EmitCorner(
     mesh_.vertices_.push_back(vtx_out);
 }
 
+
+
+//================================================================
+// FbxMesh::EmitTriangleFanFaces
+//   face_list を triangle fan で三角形化し、EmitCorner() で頂点を吐く
+//   ※挙動・順序は ExpandNodesImpl 内の旧実装と同一
+//================================================================
+void FbxMesh::EmitTriangleFanFaces(
+    BuildContext& ctx,
+    const ufbx_mesh* mesh,
+    const std::vector<uint32_t>& face_list)
+{
+    if (!mesh) return;
+
+    for (uint32_t f_index : face_list) {
+        const ufbx_face f = mesh->faces.data[f_index];
+        if (f.num_indices < 3) continue;
+
+        // 先頭頂点を固定して (0, k+1, k+2) の三角形に分割
+        for (uint32_t k = 0; k + 2 < f.num_indices; ++k) {
+            uint32_t corners[3] = {
+                f.index_begin + 0,
+                f.index_begin + (k + 1),
+                f.index_begin + (k + 2),
+            };
+
+            for (int c = 0; c < 3; ++c) {
+                uint32_t corner = corners[c];
+                uint32_t vtx = mesh->vertex_indices.data[corner];
+                EmitCorner(ctx, corner, vtx);
+            }
+        }
+    }
+}
+
 //================================================================
 // BuildFromScene
 //================================================================
@@ -577,6 +660,104 @@ bool FbxMesh::BuildFromNode(const ufbx_scene* scene,
 //   write_scene_radius:
 //     true  -> skeleton.Data().scene_radius_ を bounds_.radius で更新（ExpandAllNodes と同じ）
 //================================================================
+//================================================================
+// PrepareSkinningForMeshImpl
+//   - メッシュのスキニング有無を反映し、頂点ごとの影響（最大4）を構築する
+//   - ※挙動は ExpandNodesImpl 内の旧処理と同一
+//================================================================
+void FbxMesh::PrepareSkinningForMeshImpl(
+    const ufbx_mesh* mesh,
+    const std::unordered_map<const ufbx_node*, uint16_t>& bone_index_map,
+    std::vector<VertexInfluence>& out_infl_per_vtx)
+{
+    // スキニングの有無（シーン全体として1つでもあれば true）
+    if (mesh && mesh->skin_deformers.count > 0) {
+        has_skinning_ = true;
+    }
+
+    // 頂点ごとの影響（最大4）
+    BuildInfluencesForMesh(mesh, bone_index_map, out_infl_per_vtx);
+}
+
+void FbxMesh::ExpandSingleNodeImpl(
+    const ufbx_node* node,
+    const std::unordered_map<const ufbx_node*, uint16_t>& bone_index_map,
+    bool apply_geo)
+{
+    if (!node) return;
+
+    const ufbx_mesh* mesh = node->mesh;
+    if (!mesh) return;
+
+    // -----------------------------------------
+    // 3-1) 頂点ごとの影響（ボーン/ウェイト）を構築
+    // -----------------------------------------
+    std::vector<VertexInfluence> infl_per_vtx;
+    PrepareSkinningForMeshImpl(mesh, bone_index_map, infl_per_vtx);
+
+    // -----------------------------------------
+    // 3-2) UV セット（基本は最初のUV）
+    // -----------------------------------------
+    const ufbx_vertex_vec2* base_uv = FbxMeshBuild::ChooseBaseUVSet(mesh);
+
+    // -----------------------------------------
+    // 3-3) 面をマテリアル単位に分類
+    // -----------------------------------------
+    auto faces_by_mat = FbxMeshBuild::BuildFacesByMaterial(mesh);
+
+    // -----------------------------------------
+    // 3-4) マテリアルごとに MeshPart を作って頂点を吐く
+    // -----------------------------------------
+    for (auto& kv : faces_by_mat) {
+        uint32_t mat_index = kv.first;
+        const std::vector<uint32_t>& face_list = kv.second;
+
+        ExpandMaterialGroupImpl(
+            node,
+            mesh,
+            mat_index,
+            face_list,
+            infl_per_vtx,
+            base_uv,
+            apply_geo);
+    }
+}
+
+void FbxMesh::ExpandMaterialGroupImpl(
+    const ufbx_node* node,
+    const ufbx_mesh* mesh,
+    uint32_t mat_index,
+    const std::vector<uint32_t>& face_list,
+    const std::vector<VertexInfluence>& infl_per_vtx,
+    const ufbx_vertex_vec2* base_uv,
+    bool apply_geo)
+{
+    MeshPart part;
+    part.mat = nullptr;
+    part.start_index = (uint32_t)mesh_.indices_.size();
+
+    part.mat = FbxMeshBuild::ResolveMaterialForPart(node, mesh, mat_index);
+
+    // テクスチャが指定する UV セットを選択
+    const ufbx_vertex_vec2* uvv =
+        ChooseUVSet(mesh, part.mat, base_uv);
+
+    // EmitCorner() に渡すコンテキスト
+    BuildContext ctx =
+        FbxMeshBuild::MakeBuildContext(node, mesh, uvv, &infl_per_vtx, apply_geo);
+
+    // face -> triangle fan で三角形化して吐く
+    EmitTriangleFanFaces(ctx, mesh, face_list);
+
+    // MeshPart 確定（インデックス範囲）
+    part.index_count =
+        (uint32_t)mesh_.indices_.size() - part.start_index;
+    if (part.index_count > 0) {
+        mesh_.parts_.push_back(part);
+    }
+}
+
+
 void FbxMesh::ExpandNodesImpl(
     const ufbx_scene* scene,
     const std::vector<const ufbx_node*>& nodes,
@@ -607,99 +788,7 @@ void FbxMesh::ExpandNodesImpl(
     // 3) 指定ノード群を展開
     // -----------------------------
     for (const ufbx_node* node : nodes) {
-        if (!node) continue;
-
-        const ufbx_mesh* mesh = node->mesh;
-        if (!mesh) continue;
-
-        // スキニングの有無（シーン全体として1つでもあれば true）
-        if (mesh->skin_deformers.count > 0) {
-            has_skinning_ = true;
-        }
-
-        // -----------------------------------------
-        // 3-1) 頂点ごとの影響（ボーン/ウェイト）を構築
-        // -----------------------------------------
-        std::vector<VertexInfluence> infl_per_vtx;
-        BuildInfluencesForMesh(mesh, bone_index_map, infl_per_vtx);
-
-        // -----------------------------------------
-        // 3-2) UV セット（基本は最初のUV）
-        // -----------------------------------------
-        const ufbx_vertex_vec2* base_uv = FbxMeshBuild::ChooseBaseUVSet(mesh);
-        // -----------------------------------------
-                // 3-3) 面をマテリアル単位に分類
-                // -----------------------------------------
-        auto faces_by_mat = FbxMeshBuild::BuildFacesByMaterial(mesh);
-
-        // -----------------------------------------
-                // 3-4) マテリアルごとに MeshPart を作って頂点を吐く
-                // -----------------------------------------
-        for (auto& kv : faces_by_mat) {
-            uint32_t                     mat_index = kv.first;
-            const std::vector<uint32_t>& face_list = kv.second;
-
-            MeshPart part;
-            part.mat = nullptr;
-            part.start_index = (uint32_t)mesh_.indices_.size();
-
-            // マテリアル取得（node 優先、無ければ mesh）
-            {
-                const ufbx_material* mat = nullptr;
-                if (node->materials.count > mat_index &&
-                    node->materials.data[mat_index])
-                {
-                    mat = node->materials.data[mat_index];
-                }
-                else if (mesh->materials.count > mat_index) {
-                    mat = mesh->materials.data[mat_index];
-                }
-                part.mat = mat;
-            }
-
-            // テクスチャに指定された UVSet 名があるならそちらを使う
-            const ufbx_vertex_vec2* uvv =
-                ChooseUVSet(mesh, part.mat, base_uv);
-
-            // EmitCorner() に渡すコンテキスト
-            BuildContext ctx;
-            ctx.mesh = mesh;
-            ctx.uvv = uvv;
-            ctx.infl_per_vtx = &infl_per_vtx;
-
-            // ExpandNode と同じ挙動：node の geometry_to_world を適用
-            if (apply_geo) {
-                DirectX::XMFLOAT4X4 m = UfbxUtil::ToXMMatrix(node->geometry_to_world);
-                ctx.geo = DirectX::XMLoadFloat4x4(&m);
-            }
-
-            // face -> triangle fan で三角形化して吐く
-            for (uint32_t f_index : face_list) {
-                const ufbx_face f = mesh->faces.data[f_index];
-                if (f.num_indices < 3) continue;
-
-                for (uint32_t k = 0; k + 2 < f.num_indices; ++k) {
-                    uint32_t corners[3] = {
-                        f.index_begin + 0,
-                        f.index_begin + (k + 1),
-                        f.index_begin + (k + 2),
-                    };
-
-                    for (int c = 0; c < 3; ++c) {
-                        uint32_t corner = corners[c];
-                        uint32_t vtx = mesh->vertex_indices.data[corner];
-                        EmitCorner(ctx, corner, vtx);
-                    }
-                }
-            }
-
-            // このパーツのインデックス数を確定
-            part.index_count =
-                (uint32_t)mesh_.indices_.size() - part.start_index;
-            if (part.index_count > 0) {
-                mesh_.parts_.push_back(part);
-            }
-        }
+        ExpandSingleNodeImpl(node, bone_index_map, apply_geo);
     }
 
     // -----------------------------
