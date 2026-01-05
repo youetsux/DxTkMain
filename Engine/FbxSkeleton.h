@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 #include <vector>
 #include <DirectXMath.h>
 #include <unordered_map>
@@ -9,41 +9,48 @@ struct ufbx_material;
 struct ufbx_anim;
 
 // ------------------------------------------------------------
-// ƒ{[ƒ“1–{•ª‚Ìî•ñ
-// E‚Ç‚Ì ufbx_node ‚É‘Î‰‚µ‚Ä‚¢‚é‚©
-// Eeƒ{[ƒ“‚ÌƒCƒ“ƒfƒbƒNƒX
-// EƒoƒCƒ“ƒhƒ|[ƒYi‰Šúp¨j‚Ìs—ñ
+// ãƒœãƒ¼ãƒ³1æœ¬åˆ†ã®æƒ…å ±
+// ãƒ»ã©ã® ufbx_node ã«å¯¾å¿œã—ã¦ã„ã‚‹ã‹
+// ãƒ»è¦ªãƒœãƒ¼ãƒ³ã®ã‚¤ãƒ³ãƒ‡ãƒƒã‚¯ã‚¹
+// ãƒ»ãƒã‚¤ãƒ³ãƒ‰ãƒãƒ¼ã‚ºï¼ˆåˆæœŸå§¿å‹¢ï¼‰ã®è¡Œåˆ—
 // ------------------------------------------------------------
 struct BoneInfo
 {
-    const ufbx_node* node = nullptr; // ‚±‚Ìƒ{[ƒ“‚É‘Î‰‚·‚é ufbx ‚Ìƒm[ƒh
-    int              parent = -1;    // eƒ{[ƒ“‚ÌƒCƒ“ƒfƒbƒNƒXi‚È‚¯‚ê‚Î -1j
+    const ufbx_node* node = nullptr; // ã“ã®ãƒœãƒ¼ãƒ³ã«å¯¾å¿œã™ã‚‹ ufbx ã®ãƒãƒ¼ãƒ‰
+    int              parent = -1;    // è¦ªãƒœãƒ¼ãƒ³ã®ã‚¤ãƒ³ãƒ‡ãƒƒã‚¯ã‚¹ï¼ˆãªã‘ã‚Œã° -1ï¼‰
 
-    DirectX::XMFLOAT4X4 bind_world{};       // ƒ{[ƒ“‚ÌƒoƒCƒ“ƒhp¨‚Ìƒ[ƒ‹ƒhs—ñ
-    DirectX::XMFLOAT4X4 inv_bind_world{};   // ã‚Ì‹ts—ñ
-    DirectX::XMFLOAT4X4 geom_bind_world{};  // ƒWƒIƒƒgƒŠ ¨ ƒ{[ƒ“ ‚Ì•ÏŠ·s—ñ
-    DirectX::XMFLOAT4X4 inv_geom_bind_world{}; // ‚»‚Ì‹ts—ñ
+    DirectX::XMFLOAT4X4 bind_world{};           // ãƒœãƒ¼ãƒ³ã®ãƒã‚¤ãƒ³ãƒ‰å§¿å‹¢ã®ãƒ¯ãƒ¼ãƒ«ãƒ‰è¡Œåˆ—
+    DirectX::XMFLOAT4X4 inv_bind_world{};       // ä¸Šã®é€†è¡Œåˆ—
+    DirectX::XMFLOAT4X4 geom_bind_world{};      // ã‚¸ã‚ªãƒ¡ãƒˆãƒª â†’ ãƒœãƒ¼ãƒ³ ã®å¤‰æ›è¡Œåˆ—
+    DirectX::XMFLOAT4X4 inv_geom_bind_world{};  // ãã®é€†è¡Œåˆ—
 };
 
 // ------------------------------------------------------------
- // ƒXƒPƒ‹ƒgƒ“‘S‘Ì‚Ìƒf[ƒ^
- // Eƒ{[ƒ“”z—ñ
- // EŒ»İ‚Ìƒ{[ƒ“‚Ìƒ[ƒ‹ƒhs—ñiƒAƒjƒ[ƒVƒ‡ƒ“‚Å•Ï‰»j
- // Eu fbx ‚Ìƒm[ƒh ¨ ƒ{[ƒ“”Ô†‚Ö‚Ìƒ}ƒbƒv
- // EƒXƒLƒjƒ“ƒO—p‚Ìs—ñƒLƒƒƒbƒVƒ…
- // ------------------------------------------------------------
+// ã‚¹ã‚±ãƒ«ãƒˆãƒ³å…¨ä½“ã®ãƒ‡ãƒ¼ã‚¿
+// ãƒ»ãƒœãƒ¼ãƒ³é…åˆ—
+// ãƒ»ç¾åœ¨ã®ãƒœãƒ¼ãƒ³ã®ãƒ¯ãƒ¼ãƒ«ãƒ‰è¡Œåˆ—ï¼ˆã‚¢ãƒ‹ãƒ¡ãƒ¼ã‚·ãƒ§ãƒ³ã§å¤‰åŒ–ï¼‰
+// ãƒ»ufbx ã®ãƒãƒ¼ãƒ‰ â†’ ãƒœãƒ¼ãƒ³ç•ªå·ã¸ã®ãƒãƒƒãƒ—
+// ãƒ»ã‚¹ã‚­ãƒ‹ãƒ³ã‚°ç”¨ã®è¡Œåˆ—ã‚­ãƒ£ãƒƒã‚·ãƒ¥
+// ------------------------------------------------------------
 struct SkeletonData
 {
-    // ‘Sƒ{[ƒ“‚Ìî•ñi”z—ñ‚ÌƒCƒ“ƒfƒbƒNƒX = ƒ{[ƒ“”Ô†j
+    // å…¨ãƒœãƒ¼ãƒ³ã®æƒ…å ±ï¼ˆé…åˆ—ã®ã‚¤ãƒ³ãƒ‡ãƒƒã‚¯ã‚¹ = ãƒœãƒ¼ãƒ³ç•ªå·ï¼‰
     std::vector<BoneInfo> bones_;
-    // Œ»İ t ‚É‚¨‚¯‚éƒ{[ƒ“‚Ìƒ[ƒ‹ƒhs—ñinode_to_world(t)j
+
+    // ç¾åœ¨æ™‚åˆ» t ã«ãŠã‘ã‚‹ãƒœãƒ¼ãƒ³ã®ãƒ¯ãƒ¼ãƒ«ãƒ‰è¡Œåˆ—ï¼ˆnode_to_world(t)ï¼‰
     std::vector<DirectX::XMFLOAT4X4> curr_world_;
-    // ufbx_node* ‚©‚çƒ{[ƒ“”Ô†iuint16_tj‚ğˆø‚­‚½‚ß‚Ì«‘
+
+    // 1ãƒ•ãƒ¬ãƒ¼ãƒ å†…ã§ã®ãƒãƒ¼ãƒ‰ãƒ¯ãƒ¼ãƒ«ãƒ‰è¡Œåˆ—è©•ä¾¡ã‚­ãƒ£ãƒƒã‚·ãƒ¥ï¼ˆUpdateAtTime() ç”¨ï¼‰
+    std::unordered_map<const ufbx_node*, DirectX::XMFLOAT4X4> node_world_cache_;
+
+    // ufbx_node* ã‹ã‚‰ãƒœãƒ¼ãƒ³ç•ªå·ï¼ˆuint16_tï¼‰ã‚’å¼•ããŸã‚ã®è¾æ›¸
     std::unordered_map<const ufbx_node*, uint16_t> bone_index_of_;
-    // CPU ƒXƒLƒjƒ“ƒO‚Åg‚¤ƒXƒLƒ“s—ñ‚Ì”z—ñi–ˆƒtƒŒ[ƒ€XVj
+
+    // CPU ã‚¹ã‚­ãƒ‹ãƒ³ã‚°ã§ä½¿ã†ã‚¹ã‚­ãƒ³è¡Œåˆ—ã®é…åˆ—ï¼ˆæ¯ãƒ•ãƒ¬ãƒ¼ãƒ æ›´æ–°ï¼‰
     std::vector<DirectX::XMMATRIX> skin_mats_;
-    // ƒV[ƒ“‚Ì‚¨‚¨‚æ‚»‚Ì‘å‚«‚³i”¼Œaj
-    // ¨ ƒ{[ƒ“‚ÌƒfƒoƒbƒO•`‰æ‚Å²‚Ì’·‚³‚ğŒˆ‚ß‚é‚½‚ß‚Ég‚¤
+
+    // ã‚·ãƒ¼ãƒ³ã®ãŠãŠã‚ˆãã®å¤§ãã•ï¼ˆåŠå¾„ï¼‰
+    // â†’ ãƒœãƒ¼ãƒ³ã®ãƒ‡ãƒãƒƒã‚°æç”»ã§è»¸ã®é•·ã•ã‚’æ±ºã‚ã‚‹ãŸã‚ã«ä½¿ã†
     float scene_radius_ = 1.0f;
 };
 
@@ -58,18 +65,18 @@ public:
     float SceneRadius() const;
     float& SceneRadius() { return data_.scene_radius_; }
 
-    // ’Ç‰Á‚ğ„§
+    // è¿½åŠ é–¢æ•°
     const std::unordered_map<const ufbx_node*, uint16_t>& BoneIndexMap() const;
     const std::vector<DirectX::XMMATRIX>& SkinMatrices() const;
-    std::vector<DirectX::XMMATRIX>& SkinMatrices(); // ‘‚«‚İ‚µ‚½‚¢ê‡—p
+    std::vector<DirectX::XMMATRIX>& SkinMatrices(); // æ›¸ãè¾¼ã¿ã—ãŸã„å ´åˆç”¨
+
 public:
     bool BuildFromScene(const ufbx_scene* scene);
     void UpdateAtTime(const ufbx_scene* scene, const ufbx_anim* anim, double t_sec);
     void DrawDebug(const DirectX::XMMATRIX& world,
-                   const DirectX::XMMATRIX& view,
-                   const DirectX::XMMATRIX& proj);
+        const DirectX::XMMATRIX& view,
+        const DirectX::XMMATRIX& proj);
 
 private:
     SkeletonData data_;
 };
-
