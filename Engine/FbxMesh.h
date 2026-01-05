@@ -140,6 +140,11 @@ private:
 
     void PrepareExpandImpl();
 
+    MeshPart MakeMeshPartForMaterial(
+        const ufbx_node* node,
+        const ufbx_mesh* mesh,
+        uint32_t mat_index) const;
+
     void ExpandMaterialGroupImpl(
         const ufbx_node* node,
         const ufbx_mesh* mesh,
@@ -148,6 +153,8 @@ private:
         const std::vector<VertexInfluence>& infl_per_vtx,
         const ufbx_vertex_vec2* base_uv,
         bool apply_geo);
+
+    void CommitMeshPartIfNotEmpty(MeshPart& part);
 
     void ExpandAllMaterialGroupsImpl(
         const ufbx_node* node,
