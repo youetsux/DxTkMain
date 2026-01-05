@@ -9,19 +9,6 @@
 #include "Engine/Gfx.h"
 #include <DirectXMath.h>
 
-
-namespace {
-    void DBG_LOGF(const char* fmt, ...)
-    {
-        char buf[512];
-        va_list ap;
-        va_start(ap, fmt);
-        std::vsnprintf(buf, sizeof(buf), fmt, ap);
-        va_end(ap);
-        OutputDebugStringA(buf);
-    }
-}
-
 TestScene::TestScene()
 {
 }
@@ -98,9 +85,7 @@ void TestScene::Update()
     {
         actor_->GetTransform().position_.x += 1.0f * dt;
     }
-    if (Input::IsKey(VK_LEFT) || Input::IsKey(VK_RIGHT)) {
-        DBG_LOGF("[MoveX] dt=%.6f\n", dt);
-    }
+
 
     // --- 追従カメラ（最小） ---
     // 追従対象の座標
