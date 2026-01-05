@@ -10,8 +10,17 @@
 #include <DirectXMath.h>
 
 
-
-
+namespace {
+    void DBG_LOGF(const char* fmt, ...)
+    {
+        char buf[512];
+        va_list ap;
+        va_start(ap, fmt);
+        std::vsnprintf(buf, sizeof(buf), fmt, ap);
+        va_end(ap);
+        OutputDebugStringA(buf);
+    }
+}
 
 TestScene::TestScene()
 {
@@ -77,17 +86,20 @@ void TestScene::Initialize()
 void TestScene::Update()
 {
     if (!actor_) return;
-
+   
     const float dt = (float)EngineTime::DeltaTime();
 
     // --- 入力で左右に動かす（追従が分かりやすいので一緒に） ---
     if (Input::IsKey(VK_LEFT))
     {
-        actor_->GetTransform().position_.x -= 0.1f * dt;
+        actor_->GetTransform().position_.x -= 1.0f * dt;
     }
     if (Input::IsKey(VK_RIGHT))
     {
-        actor_->GetTransform().position_.x += 0.1f * dt;
+        actor_->GetTransform().position_.x += 1.0f * dt;
+    }
+    if (Input::IsKey(VK_LEFT) || Input::IsKey(VK_RIGHT)) {
+        DBG_LOGF("[MoveX] dt=%.6f\n", dt);
     }
 
     // --- 追従カメラ（最小） ---

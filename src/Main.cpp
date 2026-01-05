@@ -1,10 +1,16 @@
-﻿// WinMain.cpp
+﻿// Main.cpp  (方針A：可変dtに統一 / Updateは1回/フレーム)
+// - EngineTime::Tick(elapsed) は 1回/フレーム
+// - g_app.Update() も 1回/フレーム
+// - Input::ProcessMessage は WndProc で維持
+// - Render は（任意で）60Hz目標で SleepUntil によるペーシングは残す（dt自体は可変のまま）
+
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>
-#include "App.h"
-#include <mmsystem.h> // timeBeginPeriod / timeEndPeriod
+#include <mmsystem.h>   // timeBeginPeriod / timeEndPeriod
+#include <algorithm>   // std::max
 #include <cmath>
+#include "App.h"
 #include "..\Engine\EngineTime.h"
 #include "..\Engine\Input.h"
 
@@ -39,6 +45,7 @@ static void SleepUntil(double targetTime, double spinThreshold, const LARGE_INTE
 int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
 {
     HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    (void)hr;
 
     WNDCLASSEXW wc{}; wc.cbSize = sizeof(wc);
     wc.style = CS_HREDRAW | CS_VREDRAW | CS_OWNDC;
@@ -54,7 +61,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
         rc.right - rc.left, rc.bottom - rc.top,
         nullptr, nullptr, hInst, nullptr);
 
-    g_app.Initialize(hwnd, gW, gH); // ここは既存まま
+    g_app.Initialize(hwnd, gW, gH);
     g_ready = true;
     ShowWindow(hwnd, SW_SHOWDEFAULT);
 
@@ -63,14 +70,14 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
     LARGE_INTEGER freq;
     QueryPerformanceFrequency(&freq);
 
-    const double targetDt = 1.0 / 60.0; // 60 FPS target
-    const double spinThreshold = 0.003;  // 3ms のスピン閾値（必要に応じ調整）
+    // Render の目標間隔（ペーシング用）。dt は可変のまま（elapsed を Tick する）
+    const double targetDt = 1.0 / 60.0;
+    const double spinThreshold = 0.003;
 
     LARGE_INTEGER prevCnt; QueryPerformanceCounter(&prevCnt);
     double prevTime = double(prevCnt.QuadPart) / double(freq.QuadPart);
 
     double lastRenderTime = prevTime;
-    double accumulator = 0.0;
 
     // FPS 表示変数
     double fpsTimeAccum = 0.0;
@@ -90,27 +97,19 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
         }
         if (!run) break;
 
-        // 時刻更新
+        // 時刻更新（実測フレーム時間）
         LARGE_INTEGER nowCnt; QueryPerformanceCounter(&nowCnt);
         double now = double(nowCnt.QuadPart) / double(freq.QuadPart);
-        double elapsed = now - prevTime;      // ★実測フレーム時間
+        double elapsed = now - prevTime;      // ★実測dt（可変）
         prevTime = now;
 
-        // ★ ここで EngineTime を更新（フレームごとに1回だけ）
+        // ★ EngineTime は可変dtで更新（1フレームに1回だけ）
         EngineTime::Tick(elapsed);
 
-        // Update 固定（accumulator ベース）
-        accumulator += elapsed;
-        const int maxUpdatesPerFrame = 5;
-        int updates = 0;
-        while (accumulator >= targetDt && updates < maxUpdatesPerFrame) {
-            g_app.Update();
-            accumulator -= targetDt;
-            ++updates;
-        }
-        if (updates >= maxUpdatesPerFrame) accumulator = 0.0;
+        // ★ Update は 1フレームに1回だけ（可変dt前提）
+        g_app.Update();
 
-        // 次の描画時刻を計算
+        // 次の描画時刻を計算（ペーシングは維持：dt自体は Tick 済みなので変えない）
         double nextRenderTime = lastRenderTime + targetDt;
         if (now < nextRenderTime) {
             SleepUntil(nextRenderTime, spinThreshold, freq);
@@ -125,9 +124,9 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
         LARGE_INTEGER afterCnt; QueryPerformanceCounter(&afterCnt);
         lastRenderTime = double(afterCnt.QuadPart) / double(freq.QuadPart);
 
-        // ★ FPS計測：実測elapsedで1秒ごとの平均FPSを出す
+        // FPS計測：実測elapsedで1秒ごとの平均FPSを出す
         fpsFrames++;
-        fpsTimeAccum += elapsed;   // ここは targetDt ではなく elapsed
+        fpsTimeAccum += elapsed;
 
         if (fpsTimeAccum >= fpsUpdateInterval) {
             double fps = double(fpsFrames) / fpsTimeAccum;
@@ -140,6 +139,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
     }
 
     timeEndPeriod(1);
+    CoUninitialize();
     return (int)msg.wParam;
 }
 
@@ -147,7 +147,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT m, WPARAM w, LPARAM l)
 {
     if (g_ready)
     {
-        Input::ProcessMessage(m, w, l); // ★追加：DXTK Keyboard にメッセージを渡す
+        Input::ProcessMessage(m, w, l); // ★維持：DXTK Keyboard にメッセージを渡す
     }
 
     switch (m) {
@@ -161,6 +161,3 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT m, WPARAM w, LPARAM l)
     }
     return DefWindowProcW(hWnd, m, w, l);
 }
-
-
-

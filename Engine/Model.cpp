@@ -14,6 +14,13 @@
 #include <cstring>
 #include <utility>
 
+//#define DBG_LOG(fmt, ...)                          \
+//do {                                               \
+//    char _buf[512];                                \
+//    std::snprintf(_buf, sizeof(_buf), fmt, __VA_ARGS__); \
+//    OutputDebugStringA(_buf);                      \
+//} while (0)
+
 using namespace DirectX;
 
 namespace
@@ -460,6 +467,17 @@ namespace Model
             }
         }
 
+        // ===== root scale debug =====
+        //DBG_LOG(
+        //    "[RootScale] height=%.6f target=%.6f rootScale=%.6f finite(h=%d s=%d)\n",
+        //    height,
+        //    targetHeight,
+        //    md.rootScale,
+        //    std::isfinite(height),
+        //    std::isfinite(md.rootScale)
+        //);
+        // ============================
+
         const float EPS = 1e-5f;
         if (height < EPS)
         {
@@ -469,6 +487,17 @@ namespace Model
         {
             md.rootScale = targetHeight / height;
         }
+
+        // ===== root scale debug =====
+        //DBG_LOG(
+        //    "[RootScale] height=%.6f target=%.6f rootScale=%.6f finite(h=%d s=%d)\n",
+        //    height,
+        //    targetHeight,
+        //    md.rootScale,
+        //    std::isfinite(height),
+        //    std::isfinite(md.rootScale)
+        //);
+        // ============================
 
         return handle;
     }
