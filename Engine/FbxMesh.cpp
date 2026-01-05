@@ -72,9 +72,7 @@ namespace FbxMeshBuild
         }
 
         return nullptr;
-    }
-
-// ------------------------------------------------------------
+    }// ------------------------------------------------------------
 // 面（face）をマテリアル単位に分類する
 // ------------------------------------------------------------
     std::unordered_map<uint32_t, std::vector<uint32_t>> BuildFacesByMaterial(
@@ -93,6 +91,20 @@ namespace FbxMeshBuild
         }
 
         return faces_by_mat;
+    }
+
+    // ------------------------------------------------------------
+    // base_uv 選択と faces_by_mat 構築をまとめて行う
+    //   - out_base_uv: ChooseBaseUVSet() の結果を返す
+    //   - 戻り値     : BuildFacesByMaterial() の結果を返す
+    // ------------------------------------------------------------
+    std::unordered_map<uint32_t, std::vector<uint32_t>>
+        BuildFacesByMaterialAndChooseBaseUV(
+            const ufbx_mesh* mesh,
+            const ufbx_vertex_vec2*& out_base_uv)
+    {
+        out_base_uv = ChooseBaseUVSet(mesh);
+        return BuildFacesByMaterial(mesh);
     }
 
     // ------------------------------------------------------------
@@ -679,6 +691,22 @@ void FbxMesh::PrepareSkinningForMeshImpl(
     BuildInfluencesForMesh(mesh, bone_index_map, out_infl_per_vtx);
 }
 
+// ------------------------------------------------------------
+// ExpandNodesImpl の後処理（境界確定 / scene_radius 更新 / bind&skinned 初期化）
+// ------------------------------------------------------------
+void FbxMesh::FinalizeExpandImpl(FbxSkeleton& skeleton, bool write_scene_radius)
+{
+    // 4) 境界（AABB→Sphere）を確定
+    bounds_.RecalcSphereFromAABB();
+
+    // ExpandAllNodes と同じ挙動：シーン半径を skeleton 側に保存
+    FbxMeshBuild::WriteSceneRadiusIfNeeded(skeleton, bounds_.radius, write_scene_radius);
+
+    // 5) スキニング用のバインド/作業頂点を初期化
+    FbxMeshBuild::InitBindAndSkinnedVertices(mesh_);
+}
+
+
 void FbxMesh::ExpandSingleNodeImpl(
     const ufbx_node* node,
     const std::unordered_map<const ufbx_node*, uint16_t>& bone_index_map,
@@ -698,29 +726,23 @@ void FbxMesh::ExpandSingleNodeImpl(
     // -----------------------------------------
     // 3-2) UV セット（基本は最初のUV）
     // -----------------------------------------
-    const ufbx_vertex_vec2* base_uv = FbxMeshBuild::ChooseBaseUVSet(mesh);
+    const ufbx_vertex_vec2* base_uv = nullptr;
 
     // -----------------------------------------
     // 3-3) 面をマテリアル単位に分類
     // -----------------------------------------
-    auto faces_by_mat = FbxMeshBuild::BuildFacesByMaterial(mesh);
+    auto faces_by_mat = FbxMeshBuild::BuildFacesByMaterialAndChooseBaseUV(mesh, base_uv);
 
     // -----------------------------------------
     // 3-4) マテリアルごとに MeshPart を作って頂点を吐く
     // -----------------------------------------
-    for (auto& kv : faces_by_mat) {
-        uint32_t mat_index = kv.first;
-        const std::vector<uint32_t>& face_list = kv.second;
-
-        ExpandMaterialGroupImpl(
-            node,
-            mesh,
-            mat_index,
-            face_list,
-            infl_per_vtx,
-            base_uv,
-            apply_geo);
-    }
+    ExpandAllMaterialGroupsImpl(
+        node,
+        mesh,
+        faces_by_mat,
+        infl_per_vtx,
+        base_uv,
+        apply_geo);
 }
 
 void FbxMesh::ExpandMaterialGroupImpl(
@@ -758,6 +780,30 @@ void FbxMesh::ExpandMaterialGroupImpl(
 }
 
 
+void FbxMesh::ExpandAllMaterialGroupsImpl(
+    const ufbx_node* node,
+    const ufbx_mesh* mesh,
+    const std::unordered_map<uint32_t, std::vector<uint32_t>>& faces_by_mat,
+    const std::vector<VertexInfluence>& infl_per_vtx,
+    const ufbx_vertex_vec2* base_uv,
+    bool apply_geo)
+{
+    for (auto& kv : faces_by_mat) {
+        uint32_t mat_index = kv.first;
+        const std::vector<uint32_t>& face_list = kv.second;
+
+        ExpandMaterialGroupImpl(
+            node,
+            mesh,
+            mat_index,
+            face_list,
+            infl_per_vtx,
+            base_uv,
+            apply_geo);
+    }
+}
+
+
 void FbxMesh::ExpandNodesImpl(
     const ufbx_scene* scene,
     const std::vector<const ufbx_node*>& nodes,
@@ -790,19 +836,10 @@ void FbxMesh::ExpandNodesImpl(
     for (const ufbx_node* node : nodes) {
         ExpandSingleNodeImpl(node, bone_index_map, apply_geo);
     }
-
     // -----------------------------
-    // 4) 境界（AABB→Sphere）を確定
+    // 4-5) 後処理（境界確定 / scene_radius 更新 / bind&skinned 初期化）
     // -----------------------------
-    bounds_.RecalcSphereFromAABB();
-
-    // ExpandAllNodes と同じ挙動：シーン半径を skeleton 側に保存
-    FbxMeshBuild::WriteSceneRadiusIfNeeded(skeleton, bounds_.radius, write_scene_radius);
-
-    // -----------------------------
-    // 5) スキニング用のバインド/作業頂点を初期化
-    // -----------------------------
-    FbxMeshBuild::InitBindAndSkinnedVertices(mesh_);
+    FinalizeExpandImpl(skeleton, write_scene_radius);
 }
 
 void FbxMesh::ExpandNode(const ufbx_scene* scene,

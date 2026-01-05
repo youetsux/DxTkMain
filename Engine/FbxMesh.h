@@ -142,11 +142,23 @@ private:
         const ufbx_vertex_vec2* base_uv,
         bool apply_geo);
 
+    void ExpandAllMaterialGroupsImpl(
+        const ufbx_node* node,
+        const ufbx_mesh* mesh,
+        const std::unordered_map<uint32_t, std::vector<uint32_t>>& faces_by_mat,
+        const std::vector<VertexInfluence>& infl_per_vtx,
+        const ufbx_vertex_vec2* base_uv,
+        bool apply_geo);
+
+
 
     void PrepareSkinningForMeshImpl(
         const ufbx_mesh* mesh,
         const std::unordered_map<const ufbx_node*, uint16_t>& bone_index_map,
         std::vector<VertexInfluence>& out_infl_per_vtx);
+
+    void FinalizeExpandImpl(FbxSkeleton& skeleton, bool write_scene_radius);
+
     void ExpandAllNodes(const ufbx_scene* scene,
         FbxSkeleton& skeleton);
 
