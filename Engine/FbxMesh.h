@@ -1,4 +1,4 @@
-// FbxMesh.h
+ï»¿// FbxMesh.h
 
 #pragma once
 
@@ -94,8 +94,8 @@ public:
         const char* fbx_path);
 
     // ------------------------------------------------------------
-    // node 1ŒÂinode->mesh 1ŒÂj‚¾‚¯“WŠJ‚µ‚Ä\’ziƒ}ƒ‹ƒ`ƒƒbƒVƒ…‘Î‰—pj
-    // š•ÏX“_: FbxMeshGroup ‚©‚çŒÄ‚Ô‘z’è‚ÌV‹KAPI
+    // node 1ï¿½Âinode->mesh 1ï¿½Âjï¿½ï¿½ï¿½ï¿½ï¿½Wï¿½Jï¿½ï¿½ï¿½Ä\ï¿½zï¿½iï¿½}ï¿½ï¿½ï¿½`ï¿½ï¿½ï¿½bï¿½Vï¿½ï¿½ï¿½Î‰ï¿½ï¿½pï¿½j
+    // ï¿½ï¿½ï¿½ÏXï¿½_: FbxMeshGroup ï¿½ï¿½ï¿½ï¿½Ä‚Ô‘zï¿½ï¿½ÌVï¿½KAPI
     // ------------------------------------------------------------
     bool BuildFromNode(const ufbx_scene* scene,
         const ufbx_node* node,
@@ -112,7 +112,7 @@ public:
 
     void ApplyUniformScale(float s);
 
-    // ƒAƒNƒZƒT
+    // ï¿½Aï¿½Nï¿½Zï¿½T
     MeshData& Data() { return mesh_; }
     const MeshData& Data() const { return mesh_; }
     BVolume& GetBV() { return bounds_; }
@@ -132,6 +132,13 @@ private:
         const ufbx_node* node,
         const std::unordered_map<const ufbx_node*, uint16_t>& bone_index_map,
         bool apply_geo);
+
+    void ExpandAllNodesImpl(
+        const std::vector<const ufbx_node*>& nodes,
+        const std::unordered_map<const ufbx_node*, uint16_t>& bone_index_map,
+        bool apply_geo);
+
+    void PrepareExpandImpl();
 
     void ExpandMaterialGroupImpl(
         const ufbx_node* node,
@@ -163,8 +170,8 @@ private:
         FbxSkeleton& skeleton);
 
     // ------------------------------------------------------------
-    // node 1ŒÂ‚¾‚¯“WŠJiBuildFromNode —pj
-    // š•ÏX“_: ƒ}ƒ‹ƒ`ƒƒbƒVƒ…‘Î‰‚Ì‚½‚ß’Ç‰Á
+    // node 1ï¿½Â‚ï¿½ï¿½ï¿½ï¿½Wï¿½Jï¿½iBuildFromNode ï¿½pï¿½j
+    // ï¿½ï¿½ï¿½ÏXï¿½_: ï¿½}ï¿½ï¿½ï¿½`ï¿½ï¿½ï¿½bï¿½Vï¿½ï¿½ï¿½Î‰ï¿½ï¿½Ì‚ï¿½ï¿½ß’Ç‰ï¿½
     // ------------------------------------------------------------
     void ExpandNode(const ufbx_scene* scene,
         const ufbx_node* node,
@@ -177,9 +184,9 @@ private:
 
     // ------------------------------------------------------------
     // ------------------------------------------------------------
-    // ExpandNode / ExpandAllNodes ‚Ì‹¤’Êˆ—
-    //   - apply_geo: node->geometry_to_world ‚ğ’¸“_/–@ü‚É“K—p‚·‚é‚©
-    //   - write_scene_radius: skeleton.Data().scene_radius_ ‚ğXV‚·‚é‚©
+    // ExpandNode / ExpandAllNodes ï¿½Ì‹ï¿½ï¿½Êï¿½ï¿½ï¿½
+    //   - apply_geo: node->geometry_to_world ï¿½ğ’¸“_/ï¿½@ï¿½ï¿½ï¿½É“Kï¿½pï¿½ï¿½ï¿½é‚©
+    //   - write_scene_radius: skeleton.Data().scene_radius_ ï¿½ï¿½ï¿½Xï¿½Vï¿½ï¿½ï¿½é‚©
     // ------------------------------------------------------------
     void ExpandNodesImpl(
         const ufbx_scene* scene,
@@ -188,8 +195,8 @@ private:
         bool apply_geo,
         bool write_scene_radius);
 
-    // Draw() ‚ğH’ö•ªŠ„‚·‚é‚½‚ß‚Ì•â•iƒ‰ƒ€ƒ_–³‚µj
-       // ¦ private ƒƒ“ƒo‚ÉƒAƒNƒZƒX‚·‚é‚½‚ßAFbxMesh ‚Ì private ƒƒ\ƒbƒh‚Æ‚µ‚Ä’è‹`‚·‚é
+    // Draw() ï¿½ï¿½ï¿½Hï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½é‚½ï¿½ß‚Ì•â•ï¿½iï¿½ï¿½ï¿½ï¿½ï¿½_ï¿½ï¿½ï¿½ï¿½ï¿½j
+       // ï¿½ï¿½ private ï¿½ï¿½ï¿½ï¿½ï¿½oï¿½ÉƒAï¿½Nï¿½Zï¿½Xï¿½ï¿½ï¿½é‚½ï¿½ßAFbxMesh ï¿½ï¿½ private ï¿½ï¿½ï¿½\ï¿½bï¿½hï¿½Æ‚ï¿½ï¿½Ä’ï¿½`ï¿½ï¿½ï¿½ï¿½
        // ------------------------------------------------------------
     bool ValidateDrawResources(ID3D11DeviceContext* ctx) const;
 

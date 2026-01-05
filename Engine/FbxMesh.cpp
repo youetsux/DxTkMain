@@ -816,31 +816,56 @@ void FbxMesh::ExpandNodesImpl(
     if (!scene) return;
 
     // -----------------------------
-    // 1) 前回データをクリア
-    // -----------------------------
-    FbxMeshBuild::ClearExpandedMeshData(mesh_);
+// 1-2) 前回データ/境界のクリア & スキニング初期化
+// -----------------------------
+    PrepareExpandImpl();
 
-    // -----------------------------
-    // 2) 境界情報をリセット
-    // -----------------------------
-    FbxMeshBuild::ResetBounds(bounds_);
-
-    // Skeleton 側の「ボーンノード→インデックス」辞書（スキニング用）
-    const auto& bone_index_map = FbxMeshBuild::GetBoneIndexMap(skeleton);
-
-    FbxMeshBuild::ResetHasSkinningFlag(has_skinning_);
+    const auto& sk_data = skeleton.Data();
+    const auto& bone_index_map = sk_data.bone_index_of_;
 
     // -----------------------------
     // 3) 指定ノード群を展開
     // -----------------------------
+    ExpandAllNodesImpl(nodes, bone_index_map, apply_geo);
+    // -----------------------------
+        // 4-5) 後処理（境界確定 / scene_radius 更新 / bind&skinned 初期化）
+        // -----------------------------
+    FinalizeExpandImpl(skeleton, write_scene_radius);
+}
+//================================================================
+// PrepareExpandImpl (CPU): ExpandNodesImpl の準備工程をまとめる
+//   - 前回データクリア
+//   - 境界リセット
+//   - ボーン辞書参照取得
+//   - has_skinning_ 初期化
+//================================================================
+void FbxMesh::PrepareExpandImpl()
+{
+    // 1) 前回データをクリア
+    FbxMeshBuild::ClearExpandedMeshData(mesh_);
+
+    // 2) 境界情報をリセット
+    FbxMeshBuild::ResetBounds(bounds_);
+
+    // スキニングフラグを初期化
+    FbxMeshBuild::ResetHasSkinningFlag(has_skinning_);
+}
+
+
+
+//================================================================
+// ExpandAllNodesImpl (CPU): nodes 配列を走査して各ノードを展開
+//================================================================
+void FbxMesh::ExpandAllNodesImpl(
+    const std::vector<const ufbx_node*>& nodes,
+    const std::unordered_map<const ufbx_node*, uint16_t>& bone_index_map,
+    bool apply_geo)
+{
     for (const ufbx_node* node : nodes) {
         ExpandSingleNodeImpl(node, bone_index_map, apply_geo);
     }
-    // -----------------------------
-    // 4-5) 後処理（境界確定 / scene_radius 更新 / bind&skinned 初期化）
-    // -----------------------------
-    FinalizeExpandImpl(skeleton, write_scene_radius);
 }
+
 
 void FbxMesh::ExpandNode(const ufbx_scene* scene,
     const ufbx_node* node,
