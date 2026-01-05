@@ -197,13 +197,18 @@ void FbxSkeleton::UpdateAtTime(const ufbx_scene* scene, const ufbx_anim* anim, d
     const auto t1 = clock::now();
 #endif
 
-    // 計算済みノードの結果を溜めるキャッシュ
+    // 計算済みノードの結果を溜めるキャッシュ（フォールバック用）
     auto& cache = data_.node_world_cache_;
     cache.clear();
     if (cache.bucket_count() < data_.bones_.size() * 2)
     {
         cache.reserve(data_.bones_.size() * 2); // rehash 回避（挙動不変）
     }
+
+    // ufbx 側でシーン全体を評価（ノードの node_to_world を更新したシーンを得る）
+    // 失敗時は従来の EvaluateNodeWorldRecursive() にフォールバックする
+    ufbx_error error = {};
+    ufbx_scene* eval_scene = ufbx_evaluate_scene(scene, anim, t, nullptr, &error);
 
 #if defined(_DEBUG)
     const auto t2 = clock::now();
@@ -229,56 +234,94 @@ void FbxSkeleton::UpdateAtTime(const ufbx_scene* scene, const ufbx_anim* anim, d
     size_t max_bone_i = 0;
 #endif
 
-    // ルート(親なし)を先に評価してキャッシュを温める
-    for (size_t i = 0; i < data_.bones_.size(); ++i)
+    if (eval_scene)
     {
-        const BoneInfo& b = data_.bones_[i];
-        if (b.parent != -1) continue;
-
-        const ufbx_node* node = b.node;
-        if (!node) continue;
-
-#if defined(_DEBUG)
-        const auto tb0 = clock::now();
-#endif
-
-        data_.curr_world_[i] = UfbxUtil::EvaluateNodeWorldRecursive(node, anim, t, cache);
-        
-#if defined(_DEBUG)
-        const auto tb1 = clock::now();
-        const double bone_ms = std::chrono::duration<double, std::milli>(tb1 - tb0).count();
-        if (bone_ms > max_bone_ms)
+        // eval_scene のノード配列は typed_id で参照できる
+        // node_to_world をそのままコピーする（親継承/インヘリット等は ufbx が反映済み）
+        for (size_t i = 0; i < bone_count; ++i)
         {
-            max_bone_ms = bone_ms;
-            max_bone_i = i;
-        }
+            const ufbx_node* node = data_.bones_[i].node;
+            if (!node) continue;
+
+            const uint32_t node_index = node->typed_id;
+            if (node_index >= eval_scene->nodes.count) continue;
+
+            const ufbx_node* eval_node = eval_scene->nodes.data[node_index];
+            if (!eval_node) continue;
+
+#if defined(_DEBUG)
+            const auto tb0 = clock::now();
 #endif
+
+            data_.curr_world_[i] = UfbxUtil::ToXMMatrix(eval_node->node_to_world);
+
+#if defined(_DEBUG)
+            const auto tb1 = clock::now();
+            const double bone_ms = std::chrono::duration<double, std::milli>(tb1 - tb0).count();
+            if (bone_ms > max_bone_ms)
+            {
+                max_bone_ms = bone_ms;
+                max_bone_i = i;
+            }
+#endif
+        }
+
+        ufbx_free_scene(eval_scene);
+        eval_scene = nullptr;
     }
-
-    // 残りを評価
-    for (size_t i = 0; i < data_.bones_.size(); ++i)
+    else
     {
-        const BoneInfo& b = data_.bones_[i];
-        if (b.parent == -1) continue;
-
-        const ufbx_node* node = b.node;
-        if (!node) continue;
-
-#if defined(_DEBUG)
-        const auto tb0 = clock::now();
-#endif
-
-        data_.curr_world_[i] = UfbxUtil::EvaluateNodeWorldRecursive(node, anim, t, cache);
-
-#if defined(_DEBUG)
-        const auto tb1 = clock::now();
-        const double bone_ms = std::chrono::duration<double, std::milli>(tb1 - tb0).count();
-        if (bone_ms > max_bone_ms)
+        // ルート(親なし)を先に評価してキャッシュを温める
+        for (size_t i = 0; i < bone_count; ++i)
         {
-            max_bone_ms = bone_ms;
-            max_bone_i = i;
-        }
+            const BoneInfo& b = data_.bones_[i];
+            if (b.parent != -1) continue;
+
+            const ufbx_node* node = b.node;
+            if (!node) continue;
+
+#if defined(_DEBUG)
+            const auto tb0 = clock::now();
 #endif
+
+            data_.curr_world_[i] = UfbxUtil::EvaluateNodeWorldRecursive(node, anim, t, cache);
+
+#if defined(_DEBUG)
+            const auto tb1 = clock::now();
+            const double bone_ms = std::chrono::duration<double, std::milli>(tb1 - tb0).count();
+            if (bone_ms > max_bone_ms)
+            {
+                max_bone_ms = bone_ms;
+                max_bone_i = i;
+            }
+#endif
+        }
+
+        // 残りを評価
+        for (size_t i = 0; i < bone_count; ++i)
+        {
+            const BoneInfo& b = data_.bones_[i];
+            if (b.parent == -1) continue;
+
+            const ufbx_node* node = b.node;
+            if (!node) continue;
+
+#if defined(_DEBUG)
+            const auto tb0 = clock::now();
+#endif
+
+            data_.curr_world_[i] = UfbxUtil::EvaluateNodeWorldRecursive(node, anim, t, cache);
+
+#if defined(_DEBUG)
+            const auto tb1 = clock::now();
+            const double bone_ms = std::chrono::duration<double, std::milli>(tb1 - tb0).count();
+            if (bone_ms > max_bone_ms)
+            {
+                max_bone_ms = bone_ms;
+                max_bone_i = i;
+            }
+#endif
+        }
     }
 
 #if defined(_DEBUG)
