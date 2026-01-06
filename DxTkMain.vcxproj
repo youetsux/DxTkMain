@@ -129,6 +129,7 @@
     <Text Include="src\README.txt" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Engine\BakedMeshImporter.h" />
     <ClInclude Include="Engine\BoundingVolume.h" />
     <ClInclude Include="Engine\Camera.h" />
     <ClInclude Include="Engine\component.h" />
@@ -158,6 +159,7 @@
     <ClInclude Include="TestScene.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Engine\BakedMeshImporter.cpp" />
     <ClCompile Include="Engine\Camera.cpp" />
     <ClCompile Include="Engine\DeviceResources.cpp" />
     <ClCompile Include="Engine\EngineTime.cpp" />

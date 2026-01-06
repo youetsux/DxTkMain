@@ -1,5 +1,4 @@
-﻿// FbxMesh.h
-
+﻿
 #pragma once
 
 
@@ -38,7 +37,7 @@
 
 
 
-
+struct BakedMeshImportResult; // from BakedMeshImporter.h (forward decl)
 
 //======================================================================
 
@@ -101,6 +100,10 @@ public:
         const ufbx_node* node,
         FbxSkeleton& skeleton,
         const char* fbx_path);
+
+    // Build mesh from baked importer result (static mesh, no skinning).
+    // Step: Debug visualization path. Existing behavior unchanged unless called.
+    bool BuildFromBaked(const BakedMeshImportResult& src, const char* fbx_path = nullptr);
 
     void Draw(
         const DirectX::XMMATRIX& world,

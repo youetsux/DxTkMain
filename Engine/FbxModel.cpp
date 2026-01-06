@@ -3,6 +3,7 @@
 #include <Windows.h>
 
 #include "FbxModel.h"
+#include "BakedMeshImporter.h"
 
 #include <cstring>
 #include <cfloat>
@@ -130,7 +131,7 @@ bool FbxModel::LoadScene(const char* fbx_path)
     opts.handedness_conversion_axis = UFBX_MIRROR_AXIS_Z;
 
     ufbx_scene* raw_scene = ufbx_load_file(fbx_path, &opts, &err);
-    
+
     if (!raw_scene) {
         return false;
     }
@@ -219,6 +220,110 @@ bool FbxModel::Load(const char* fbx_path)
     UpdateSkeletonAtTime(0.0);
     return true;
 }
+//============================================================
+// LoadBaked (new path, unused unless called explicitly)
+//  - Uses BakedMeshImporter to build meshes, then feeds into existing FbxMesh/FbxMeshGroup.
+//  - Does NOT change existing Load() behavior.
+//============================================================
+bool FbxModel::LoadBaked(const char* fbx_path)
+{
+    Reset();
+
+    if (!LoadScene(fbx_path)) {
+        return false;
+    }
+
+    const ufbx_scene* scene = scene_.get();
+    if (!scene) {
+        return false;
+    }
+
+    // Skeleton (same as normal path)
+    if (!skeleton_.BuildFromScene(scene)) {
+        return false;
+    }
+
+    // Count mesh nodes
+    size_t mesh_node_count = 0;
+    for (size_t i = 0; i < scene->nodes.count; ++i)
+    {
+        const ufbx_node* node = scene->nodes.data[i];
+        if (!node) continue;
+        if (!node->mesh) continue;
+
+        const ufbx_mesh* m = node->mesh;
+        if (m->num_faces == 0) continue;
+
+        ++mesh_node_count;
+    }
+
+    // Multi-mesh -> mesh_group_
+    if (mesh_node_count >= 2)
+    {
+        mesh_group_.Clear();
+
+        for (size_t i = 0; i < scene->nodes.count; ++i)
+        {
+            const ufbx_node* node = scene->nodes.data[i];
+            if (!node) continue;
+            if (!node->mesh) continue;
+
+            const ufbx_mesh* m = node->mesh;
+            if (m->num_faces == 0) continue;
+
+            BakedMeshImportResult baked;
+            if (!BakedMeshImporter::ImportMesh(scene, m, baked)) {
+                return false;
+            }
+
+            std::unique_ptr<FbxMesh> sub = std::make_unique<FbxMesh>();
+            if (!sub->BuildFromBaked(baked, fbx_path)) {
+                return false;
+            }
+
+            mesh_group_.AddMesh(std::move(sub));
+        }
+
+        if (mesh_group_.Empty()) {
+            return false;
+        }
+    }
+    else
+    {
+        // Single-mesh -> mesh_
+        const ufbx_mesh* first_mesh = nullptr;
+        for (size_t i = 0; i < scene->nodes.count; ++i)
+        {
+            const ufbx_node* node = scene->nodes.data[i];
+            if (!node) continue;
+            if (!node->mesh) continue;
+
+            const ufbx_mesh* m = node->mesh;
+            if (m->num_faces == 0) continue;
+
+            first_mesh = m;
+            break;
+        }
+
+        if (!first_mesh) {
+            return false;
+        }
+
+        BakedMeshImportResult baked;
+        if (!BakedMeshImporter::ImportMesh(scene, first_mesh, baked)) {
+            return false;
+        }
+
+        if (!mesh_.BuildFromBaked(baked, fbx_path)) {
+            return false;
+        }
+    }
+
+    // Initial pose
+    UpdateSkeletonAtTime(0.0);
+    return true;
+}
+
 
 //============================================================
 // GetDefaultAnim

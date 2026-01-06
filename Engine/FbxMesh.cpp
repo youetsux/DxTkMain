@@ -19,6 +19,7 @@
 #include "Gfx.h"
 #include "ufbx.h"
 #include "UfbxUtil.h"
+#include "BakedMeshImporter.h"
 
 using Microsoft::WRL::ComPtr;
 
@@ -653,6 +654,78 @@ bool FbxMesh::BuildFromNode(const ufbx_scene* scene,
 	// GPU バッファ生成後は CPU 側の頂点配列を破棄（スキニング用は別配列で保持）
 	mesh_.vertices_.clear();
 	mesh_.vertices_.shrink_to_fit();
+
+	return true;
+}
+//================================================================
+// BuildFromBaked
+//   BakedMeshImporter の結果から「静的メッシュ（スキン無し）」として構築する。
+//
+// 目的:
+//   - 既存の Renderer/Model 経路（Model::Draw(handle)）に載せて可視化するための入口。
+//   - 既存の FBX 読み込み経路は変更しない（呼ばれない限り挙動不変）。
+//
+// 前提:
+//   - src.vertex_bytes は VertexPNT2 と同一レイアウト（stride一致）であること。
+//================================================================
+bool FbxMesh::BuildFromBaked(const BakedMeshImportResult& src, const char* fbx_path)
+{
+	// 入力検証
+	if (!src.IsValid()) return false;
+	if (src.vertex_stride != sizeof(VertexPNT2)) return false;
+
+	// CPU 側メッシュを組み立て（既存経路と同じメンバへ格納）
+	mesh_.vertices_.clear();
+	mesh_.indices_.clear();
+	mesh_.parts_.clear();
+	mesh_.influences_.clear();
+	mesh_.bind_vertices_.clear();
+	mesh_.skinned_vertices_.clear();
+
+	mesh_.vertices_.resize(src.vertex_count);
+	std::memcpy(mesh_.vertices_.data(),
+		src.vertex_bytes.data(),
+		sizeof(VertexPNT2) * size_t(src.vertex_count));
+
+	mesh_.indices_ = src.indices;
+
+	// パーツ（サブメッシュ範囲）を反映
+	if (!src.submeshes.empty())
+	{
+		mesh_.parts_.reserve(src.submeshes.size());
+		for (const auto& s : src.submeshes)
+		{
+			MeshPart p;
+			p.mat = nullptr; // 焼き込み経路では FBX マテリアルを保持しない（現時点）
+			p.start_index = s.index_start;
+			p.index_count = s.index_count;
+			p.srv.Reset();
+			mesh_.parts_.push_back(std::move(p));
+		}
+	}
+	else
+	{
+		// サブメッシュ情報が無い場合は全体を 1 パーツとして描画
+		MeshPart p;
+		p.mat = nullptr;
+		p.start_index = 0;
+		p.index_count = (uint32_t)mesh_.indices_.size();
+		p.srv.Reset();
+		mesh_.parts_.push_back(std::move(p));
+	}
+
+	// スキニング無し
+	has_skinning_ = false;
+
+	// GPU バッファ生成（既存の描画経路を利用）
+	if (!CreateGpuBuffers()) {
+		return false;
+	}
+
+	// Effect/InputLayout/SRV 準備（テクスチャ無しでも描画できるよう既定設定を作る）
+	if (!CreateEffectsAndTextures(fbx_path, nullptr)) {
+		return false;
+	}
 
 	return true;
 }

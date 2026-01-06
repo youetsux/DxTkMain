@@ -46,6 +46,9 @@ public:
     // FBX t@CǂݍŁAXPgbV\z
     bool Load(const char* fbx_path);
 
+    // Baked import path (new, unused unless called explicitly)
+    bool LoadBaked(const char* fbx_path);
+
     // IȃZbgiėpꍇȂǁj
     void Reset();
 
