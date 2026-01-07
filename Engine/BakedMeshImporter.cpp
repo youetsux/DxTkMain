@@ -27,7 +27,7 @@ namespace
         }
         if (mesh->vertex_uv.exists) {
             ufbx_vec2 uv = ufbx_get_vertex_vec2(&mesh->vertex_uv, (size_t)index);
-            k.u = (float)uv.x; k.v = (float)uv.y;
+            k.u = (float)uv.x; k.v = 1.0f - (float)uv.y;
         }
         return k;
     }

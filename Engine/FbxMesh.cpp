@@ -780,7 +780,7 @@ bool FbxMesh::BuildFromBaked(const BakedMeshImportResult& src, const ufbx_scene*
 			if (scene) {
 				uint32_t mi = s.material_index;
 				if (mi < scene->materials.count) {
-					p.mat = &scene->materials.data[mi];
+					p.mat = scene->materials.data[mi];
 				}
 			}
 			p.start_index = s.index_start;
@@ -1198,6 +1198,12 @@ bool FbxMesh::CreateEffectsAndTextures(
 	// [6] MeshPart ごとにテクスチャ(SRV)を構築
 	for (auto& part : mesh_.parts_) {
 		FbxMeshBuild::BuildTextureForPart(device, fbx_dir, part.mat, part.srv);
+
+#if defined(BAKED_UV_DEBUG)
+		if (force_checker_texture_ && !part.srv) {
+			part.srv = GetCheckerboardSRV(device);
+		}
+#endif
 	}
 
 	return true;

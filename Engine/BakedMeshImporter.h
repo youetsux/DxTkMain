@@ -13,6 +13,9 @@ struct BakedMeshImportResult
         uint32_t index_start = 0;
         uint32_t index_count = 0;
         uint32_t material_index = 0;
+        // UV set index used for baking vertex UVs.
+        // 0 = mesh->vertex_uv (also mesh->uv_sets[0] if present)
+        uint32_t uv_set_index = 0;
     };
 
     std::string name;

@@ -126,6 +126,9 @@
     <ClInclude Include="Engine\FbxMeshGroup.h">
       <Filter>ソース ファイル\Engine\Fbx</Filter>
     </ClInclude>
+    <ClInclude Include="Engine\BakedMeshImporter.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="TestScene.cpp">
@@ -199,6 +202,9 @@
     </ClCompile>
     <ClCompile Include="Engine\FbxMeshGroup.cpp">
       <Filter>ソース ファイル\Engine\Fbx</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\BakedMeshImporter.cpp">
+      <Filter>ソース ファイル</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>

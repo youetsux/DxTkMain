@@ -104,6 +104,9 @@ public:
     // Build mesh from baked importer result (static mesh, no skinning).
     // Step: Debug visualization path. Existing behavior unchanged unless called.
     bool BuildFromBaked(const BakedMeshImportResult& src, const char* fbx_path = nullptr);
+
+    // Optional overload: allows passing the loaded scene for material/texture lookup.
+    // Default implementation ignores `scene` and forwards to the 2-arg overload.
     bool BuildFromBaked(const BakedMeshImportResult& src, const ufbx_scene* scene, const char* fbx_path = nullptr);
 
     void Draw(
