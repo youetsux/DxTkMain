@@ -154,7 +154,7 @@ namespace
 
     void UpdateAnimation(ModelData& md, const ufbx_anim* anim)
     {
-        // FBX の fps を使う（未設定/異常値はフォールバック）
+
         double fps = 0.0;
         if (md.pFbx)
         {
@@ -214,10 +214,10 @@ namespace
                 }
             }
 
-            // paused / 同一フレームのときは timeSec を再計算せず、前回値を使う（double再計算ブレ回避）
+
             bool needRecalc = (md.anim.currentFrame != prevFrame);
 
-            // 初回など timeSec が未設定の場合は再計算する
+
             if (!needRecalc && md.anim.timeSec == 0.0)
             {
                 needRecalc = true;
@@ -252,19 +252,19 @@ namespace
     // v' = (World * RootLocal) * v
     XMMATRIX BuildWorldMatrix(const ModelData& md)
     {
-        // Transform の World（配置）は最後に効かせる。
+
         XMMATRIX world = XMMatrixIdentity();
         if (md.pTransform) world = md.pTransform->GetWorldMatrix();
 
-        // モデル空間原点で確定するルート姿勢
+
         XMMATRIX rootS = XMMatrixScaling(md.rootScale, md.rootScale, md.rootScale);
         XMVECTOR q = XMLoadFloat4(&md.rootRotationQ);
         XMMATRIX rootR = XMMatrixRotationQuaternion(q);
 
         XMMATRIX rootLocal = rootS * rootR;
 
-        // ★ここが重要：rootLocal を先に掛ける
-        // これで「ルート姿勢はモデル空間」「Transformはワールド配置」になる
+
+
         return rootLocal * world;
     }
 }
@@ -318,6 +318,52 @@ namespace Model
             }
 
             g_modelCache[fileName] = pNew;
+            g_refCount[pNew] = 1;
+            pShared = pNew;
+        }
+
+        md.pFbx = pShared;
+        md.pTransform = nullptr;
+        md.fileName = fileName;
+        md.anim = AnimState{};
+        md.rootScale = 1.0f;
+        md.rootRotationQ = XMFLOAT4(0, 0, 0, 1);
+        md.inUse = true;
+
+        return h;
+    }
+
+    int LoadBaked(std::string fileName)
+    {
+        int h = AllocHandle();
+        auto& md = g_models[h];
+
+        if (md.inUse && md.pFbx)
+        {
+            ReleaseSharedModel(md.pFbx);
+            md.pFbx = nullptr;
+        }
+
+        FbxModel* pShared = nullptr;
+
+        const std::string cacheKey = std::string("baked:") + fileName;
+
+        auto it = g_modelCache.find(cacheKey);
+        if (it != g_modelCache.end())
+        {
+            pShared = it->second;
+            g_refCount[pShared] += 1;
+        }
+        else
+        {
+            FbxModel* pNew = new FbxModel();
+            if (!pNew->LoadBaked(fileName.c_str()))
+            {
+                delete pNew;
+                return -1;
+            }
+
+            g_modelCache[cacheKey] = pNew;
             g_refCount[pNew] = 1;
             pShared = pNew;
         }
@@ -588,8 +634,8 @@ namespace Model
         md.anim.timeSec = 0.0;
     }
 
-    // 追加：現在選択中のアニメ（AnimStack/Default）をフル再生
-    // ※フレーム指定再生は維持したまま、FBXの time_begin/time_end をフレームに変換して range を組む
+
+
     void SetAnimation(int handle, float animSpeed)
     {
         if (!IsValidHandle(handle)) return;
@@ -605,17 +651,17 @@ namespace Model
         const double duration = anim->time_end - anim->time_begin;
         if (duration <= 0.0) return;
 
-        int endFrame = (int)(duration * fps + 0.5); // 四捨五入
+        int endFrame = (int)(duration * fps + 0.5);
         if (endFrame < 1) endFrame = 1;
 
-        // 開始は 0 として扱う（UpdateAnimation 側で anim->time_begin を足す）
+
         md.anim.startFrame = 0;
         md.anim.endFrame = endFrame;
         md.anim.speed = animSpeed;
         md.anim.currentFrame = 0.0f;
         md.anim.timeSec = 0.0;
 
-        // loop/paused は既存設定を尊重（必要なら呼び出し側で SetAnimLoop/SetAnimPaused）
+
     }
 
     int GetAnimFrame(int handle)

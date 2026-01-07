@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 #include <string>
 #include <DirectXMath.h>
 #include "Transform.h"
@@ -9,6 +9,7 @@ namespace Model
 {
     void Initialize();
     int  Load(std::string fileName);
+    int  LoadBaked(std::string fileName);
     int  Load(const std::string& fileName, float targetHeight);
 
     void Draw(int handle);
@@ -16,11 +17,11 @@ namespace Model
     void Release(int handle);
     void AllRelease();
 
-    // Šù‘¶FƒtƒŒ[ƒ€w’èÄ¶
+
     void SetAnimFrame(int handle, int startFrame, int endFrame, float animSpeed);
 
-    // ’Ç‰ÁFŒ»İ‘I‘ğ’†‚ÌƒAƒjƒiAnimStack/Defaultj‚ğƒtƒ‹Ä¶
-    // ¦ƒtƒŒ[ƒ€w’èÄ¶‚ÍˆÛ‚µ‚½‚Ü‚ÜAFBX‚Ì time_begin/time_end ‚ğƒtƒŒ[ƒ€‚É•ÏŠ·‚µ‚Ä range ‚ğ‘g‚Ş
+
+
     void SetAnimation(int handle, float animSpeed);
 
     int  GetAnimFrame(int handle);
@@ -49,6 +50,6 @@ namespace Model
     void  SetRootRotationQuaternion(int handle, const DirectX::XMFLOAT4& q);
     DirectX::XMFLOAT4 GetRootRotationQuaternion(int handle);
 
-    // degreei“xjw’è
+
     void SetRootRotationYawPitchRollDeg(int handle, float yawDeg, float pitchDeg, float rollDeg);
 }
