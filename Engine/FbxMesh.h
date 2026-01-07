@@ -104,6 +104,7 @@ public:
     // Build mesh from baked importer result (static mesh, no skinning).
     // Step: Debug visualization path. Existing behavior unchanged unless called.
     bool BuildFromBaked(const BakedMeshImportResult& src, const char* fbx_path = nullptr);
+    bool BuildFromBaked(const BakedMeshImportResult& src, const ufbx_scene* scene, const char* fbx_path = nullptr);
 
     void Draw(
         const DirectX::XMMATRIX& world,
@@ -233,5 +234,6 @@ private:
 
     BVolume bounds_;
     bool    has_skinning_ = false;
+    bool    force_checker_texture_ = false;
 };
 

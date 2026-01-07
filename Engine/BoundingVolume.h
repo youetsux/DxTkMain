@@ -25,7 +25,7 @@ struct BVolume
         radius = 1.0f;
     }
 
-    // 1点を取り込んで AABB を更新
+
     void WrapBox(const DirectX::XMFLOAT3& p)
     {
         if (p.x < min.x) min.x = p.x;
@@ -37,7 +37,7 @@ struct BVolume
         if (p.z > max.z) max.z = p.z;
     }
 
-    // AABB から球を更新
+
     void RecalcSphereFromAABB()
     {
         using namespace DirectX;
@@ -58,7 +58,7 @@ struct BVolume
             radius = std::sqrt(r2);
         }
     }
-    // AABB / Sphere を一様スケール
+
     void Scale(float s)
     {
         min.x *= s;  min.y *= s;  min.z *= s;

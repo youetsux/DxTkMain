@@ -9,7 +9,7 @@ public:
     Texture();
     ~Texture();
 
-    // WIC対応フォーマットのみ（PNG/JPG/BMP/GIF/TIFF/ICO など）
+
     HRESULT Load(std::string fileName);
     void    Release();
 

@@ -1,14 +1,20 @@
-#include "ModelComponent.h"
+ï»¿#include "ModelComponent.h"
 #include "Engine\GameObject.h"
 #include "Engine\Transform.h"
 
 using namespace DirectX;
 
 ModelComponent::ModelComponent(GameObject* owner, const std::string& modelPath, float targetHeight)
+    : ModelComponent(owner, modelPath, false, targetHeight)
+{
+}
+
+ModelComponent::ModelComponent(GameObject* owner, const std::string& modelPath, bool useBaked, float targetHeight)
     : Component(owner)
     , modelPath_(modelPath)
     , targetHeight_(targetHeight)
     , modelHandle_(-1)
+    , useBaked_(useBaked)
     , hasRootScaleOverride_(false)
     , rootScale_(1.0f)
     , hasRootRotationOverride_(false)
@@ -24,8 +30,11 @@ ModelComponent::~ModelComponent()
 void ModelComponent::Initialize()
 {
     if (modelHandle_ >= 0) return;
-
-    if (targetHeight_ > 0.0f)
+    if (useBaked_)
+    {
+        modelHandle_ = Model::LoadBaked(modelPath_);
+    }
+    else if (targetHeight_ > 0.0f)
     {
         modelHandle_ = Model::Load(modelPath_, targetHeight_);
     }
@@ -33,13 +42,12 @@ void ModelComponent::Initialize()
     {
         modelHandle_ = Model::Load(modelPath_);
     }
-
     if (modelHandle_ < 0) return;
 
-    // Transform •R•t‚¯
+
     Model::SetTransform(modelHandle_, owner_->GetTransform());
 
-    // è“®ƒ‹[ƒgw’è‚ª‚ ‚ê‚Î“K—p
+
     if (hasRootScaleOverride_)
     {
         Model::SetRootScale(modelHandle_, rootScale_);

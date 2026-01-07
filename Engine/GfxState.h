@@ -1,32 +1,32 @@
-// GfxState.h
+ï»¿// GfxState.h
 #pragma once
 #include <d3d11.h>
 #include <CommonStates.h>
 
 namespace Gfx {
 
-    // •s“§–¾(ƒfƒtƒHƒ‹ƒg)•`‰æƒZƒbƒg
+
     inline void SetOpaque(ID3D11DeviceContext* ctx, DirectX::CommonStates* s) {
         ctx->OMSetBlendState(s->Opaque(), nullptr, 0xFFFFFFFF);
         ctx->OMSetDepthStencilState(s->DepthDefault(), 0);
         ctx->RSSetState(s->CullNone());
     }
 
-    // “§‰ßPNG‚È‚ÇƒXƒgƒŒ[ƒgƒ¿iNon-premultipliedj—p
+
     inline void SetAlphaNonPremul(ID3D11DeviceContext* ctx, DirectX::CommonStates* s) {
         ctx->OMSetBlendState(s->NonPremultiplied(), nullptr, 0xFFFFFFFF);
         ctx->OMSetDepthStencilState(s->DepthRead(), 0);
         ctx->RSSetState(s->CullNone());
     }
 
-    // ƒvƒŠƒ}ƒ‹ƒ`ƒ¿—piPS‚Å rgb*=a ‚µ‚Ä‚¢‚é/ƒvƒŠƒ}ƒ‹ƒ`‰æ‘œ‚ðŽg‚¤Žžj
+
     inline void SetAlphaPremul(ID3D11DeviceContext* ctx, DirectX::CommonStates* s) {
         ctx->OMSetBlendState(s->AlphaBlend(), nullptr, 0xFFFFFFFF);
         ctx->OMSetDepthStencilState(s->DepthRead(), 0);
         ctx->RSSetState(s->CullNone());
     }
 
-    // ’Ç‰ÁF‰ÁŽZ‡¬‚È‚Çi•K—v‚É‚È‚Á‚½‚çj
+
     inline void SetAdditive(ID3D11DeviceContext* ctx, DirectX::CommonStates* s) {
         ctx->OMSetBlendState(s->Additive(), nullptr, 0xFFFFFFFF);
         ctx->OMSetDepthStencilState(s->DepthRead(), 0);
@@ -35,7 +35,7 @@ namespace Gfx {
 
     inline void SetAlphaNonPremulWriteZ(ID3D11DeviceContext* ctx, DirectX::CommonStates* s) {
         ctx->OMSetBlendState(s->NonPremultiplied(), nullptr, 0xFFFFFFFF);
-        ctx->OMSetDepthStencilState(s->DepthDefault(), 0); // š Z‘‚«ž‚Ý‚ ‚è
+        ctx->OMSetDepthStencilState(s->DepthDefault(), 0);
         ctx->RSSetState(s->CullNone());
     }
 

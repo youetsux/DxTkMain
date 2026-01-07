@@ -24,6 +24,79 @@
 using Microsoft::WRL::ComPtr;
 
 
+
+// ------------------------------------------------------------
+// Debug helper: Create a checkerboard texture (for UV validation)
+// ------------------------------------------------------------
+static Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> CreateCheckerboardSRV(ID3D11Device* device)
+{
+	Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> srv;
+	if (!device) return srv;
+
+	const UINT w = 64;
+	const UINT h = 64;
+	const UINT check = 8; // squares per side
+	std::vector<uint32_t> pixels;
+	pixels.resize(size_t(w) * size_t(h));
+
+	for (UINT y = 0; y < h; ++y) {
+		for (UINT x = 0; x < w; ++x) {
+			const UINT cx = (x * check) / w;
+			const UINT cy = (y * check) / h;
+			const bool odd = ((cx ^ cy) & 1) != 0;
+			const uint8_t v = odd ? 0xFF : 0x20;
+			pixels[size_t(y) * size_t(w) + size_t(x)] =
+				0xFF000000u | (uint32_t(v) << 16) | (uint32_t(v) << 8) | uint32_t(v);
+		}
+	}
+
+	D3D11_TEXTURE2D_DESC td = {};
+	td.Width = w;
+	td.Height = h;
+	td.MipLevels = 1;
+	td.ArraySize = 1;
+	td.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	td.SampleDesc.Count = 1;
+	td.Usage = D3D11_USAGE_IMMUTABLE;
+	td.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+
+	D3D11_SUBRESOURCE_DATA init = {};
+	init.pSysMem = pixels.data();
+	init.SysMemPitch = w * sizeof(uint32_t);
+
+	Microsoft::WRL::ComPtr<ID3D11Texture2D> tex;
+	if (FAILED(device->CreateTexture2D(&td, &init, tex.GetAddressOf()))) {
+		return srv;
+	}
+
+	D3D11_SHADER_RESOURCE_VIEW_DESC sd = {};
+	sd.Format = td.Format;
+	sd.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+	sd.Texture2D.MipLevels = 1;
+
+	device->CreateShaderResourceView(tex.Get(), &sd, srv.GetAddressOf());
+	return srv;
+}
+
+// Cache per-process (device pointer check)
+static Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> GetCheckerboardSRV(ID3D11Device* device)
+{
+	static ID3D11Device* s_device = nullptr;
+	static Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> s_srv;
+
+	if (!device) {
+		s_device = nullptr;
+		s_srv.Reset();
+		return s_srv;
+	}
+
+	if (s_device != device || !s_srv) {
+		s_device = device;
+		s_srv = CreateCheckerboardSRV(device);
+	}
+	return s_srv;
+}
+
 namespace FbxMeshBuild
 {
 	// NOTE:
@@ -611,6 +684,8 @@ bool FbxMesh::BuildFromScene(const ufbx_scene* scene,
 	FbxSkeleton& skeleton,
 	const char* fbx_path)
 {
+
+	force_checker_texture_ = false;
 	if (!scene) return false;
 
 	ExpandAllNodes(scene, skeleton);
@@ -639,6 +714,8 @@ bool FbxMesh::BuildFromNode(const ufbx_scene* scene,
 	FbxSkeleton& skeleton,
 	const char* fbx_path)
 {
+
+	force_checker_texture_ = false;
 	if (!scene || !node || !node->mesh) return false;
 
 	ExpandNode(scene, node, skeleton);
@@ -668,8 +745,11 @@ bool FbxMesh::BuildFromNode(const ufbx_scene* scene,
 // 前提:
 //   - src.vertex_bytes は VertexPNT2 と同一レイアウト（stride一致）であること。
 //================================================================
-bool FbxMesh::BuildFromBaked(const BakedMeshImportResult& src, const char* fbx_path)
+
+bool FbxMesh::BuildFromBaked(const BakedMeshImportResult& src, const ufbx_scene* scene, const char* fbx_path)
 {
+
+	force_checker_texture_ = true;
 	// 入力検証
 	if (!src.IsValid()) return false;
 	if (src.vertex_stride != sizeof(VertexPNT2)) return false;
@@ -696,7 +776,13 @@ bool FbxMesh::BuildFromBaked(const BakedMeshImportResult& src, const char* fbx_p
 		for (const auto& s : src.submeshes)
 		{
 			MeshPart p;
-			p.mat = nullptr; // 焼き込み経路では FBX マテリアルを保持しない（現時点）
+			p.mat = nullptr;
+			if (scene) {
+				uint32_t mi = s.material_index;
+				if (mi < scene->materials.count) {
+					p.mat = &scene->materials.data[mi];
+				}
+			}
 			p.start_index = s.index_start;
 			p.index_count = s.index_count;
 			p.srv.Reset();
@@ -723,11 +809,16 @@ bool FbxMesh::BuildFromBaked(const BakedMeshImportResult& src, const char* fbx_p
 	}
 
 	// Effect/InputLayout/SRV 準備（テクスチャ無しでも描画できるよう既定設定を作る）
-	if (!CreateEffectsAndTextures(fbx_path, nullptr)) {
+	if (!CreateEffectsAndTextures(fbx_path, scene)) {
 		return false;
 	}
 
 	return true;
+}
+
+bool FbxMesh::BuildFromBaked(const BakedMeshImportResult& src, const char* fbx_path)
+{
+	return BuildFromBaked(src, nullptr, fbx_path);
 }
 
 //================================================================
@@ -1393,4 +1484,3 @@ void FbxMesh::ApplyUniformScale(float s)
 	// 境界情報も同じ倍率で更新
 	bounds_.Scale(s);
 }
-

@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include <string>
 #include <DirectXMath.h>
 #include "Transform.h"

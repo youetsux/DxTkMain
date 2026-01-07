@@ -14,19 +14,19 @@ namespace
         float u, v;
     };
 
-    static TempVertexKey MakeKey(const ufbx_mesh* mesh, uint32_t vertex_index)
+    static TempVertexKey MakeKey(const ufbx_mesh* mesh, uint32_t index)
     {
         TempVertexKey k{};
         if (mesh->vertex_position.exists) {
-            ufbx_vec3 p = ufbx_get_vertex_vec3(&mesh->vertex_position, (size_t)vertex_index);
+            ufbx_vec3 p = ufbx_get_vertex_vec3(&mesh->vertex_position, (size_t)index);
             k.px = (float)p.x; k.py = (float)p.y; k.pz = (float)p.z;
         }
         if (mesh->vertex_normal.exists) {
-            ufbx_vec3 n = ufbx_get_vertex_vec3(&mesh->vertex_normal, (size_t)vertex_index);
+            ufbx_vec3 n = ufbx_get_vertex_vec3(&mesh->vertex_normal, (size_t)index);
             k.nx = (float)n.x; k.ny = (float)n.y; k.nz = (float)n.z;
         }
         if (mesh->vertex_uv.exists) {
-            ufbx_vec2 uv = ufbx_get_vertex_vec2(&mesh->vertex_uv, (size_t)vertex_index);
+            ufbx_vec2 uv = ufbx_get_vertex_vec2(&mesh->vertex_uv, (size_t)index);
             k.u = (float)uv.x; k.v = (float)uv.y;
         }
         return k;
@@ -60,23 +60,27 @@ bool BakedMeshImporter::ImportMesh(const ufbx_scene* /*scene*/, const ufbx_mesh*
         size_t max_tri_indices = (size_t)(face.num_indices - 2) * 3;
         tri_indices.resize(max_tri_indices);
 
-        uint32_t written = ufbx_triangulate_face(tri_indices.data(), tri_indices.size(), mesh, face);
+        uint32_t num_tris = ufbx_triangulate_face(tri_indices.data(), tri_indices.size(), mesh, face);
 
-        for (uint32_t ti = 0; ti + 2 < written; ti += 3)
+        for (uint32_t tri = 0; tri < num_tris; ++tri)
         {
+            uint32_t base = tri * 3;
             for (uint32_t k = 0; k < 3; ++k)
             {
-                uint32_t vix = tri_indices[ti + k];
+                // NOTE:
+                // ufbx_triangulate_face() outputs indices that refer to the mesh index buffer ("corner" indices).
+                // `ufbx_triangulate_face()` outputs indices in the mesh "index" domain
+                // (0..mesh->num_indices-1). Use those directly to fetch split attributes.
+                const uint32_t index_ix = tri_indices[(size_t)base + (size_t)k];
+                corner_keys.push_back(MakeKey(mesh, index_ix));
 
-                corner_keys.push_back(MakeKey(mesh, vix));
-                corner_corner.push_back(vix);
-
-                if (mesh->vertex_indices.count > 0 && vix < (uint32_t)mesh->vertex_indices.count) {
-                    corner_cp.push_back(mesh->vertex_indices.data[vix]);
+                // Logical vertex index (control point) corresponding to this split index.
+                uint32_t cp_ix = 0;
+                if (mesh->vertex_indices.count > 0 && index_ix < (uint32_t)mesh->vertex_indices.count) {
+                    cp_ix = mesh->vertex_indices.data[index_ix];
                 }
-                else {
-                    corner_cp.push_back(0);
-                }
+                corner_cp.push_back(cp_ix);
+                corner_corner.push_back(index_ix);
             }
         }
     }
@@ -94,10 +98,15 @@ bool BakedMeshImporter::ImportMesh(const ufbx_scene* /*scene*/, const ufbx_mesh*
     size_t unique_vertices = ufbx_generate_indices(&stream, 1, indices.data(), indices.size(), nullptr, &error);
     if (unique_vertices == 0) return false;
 
-    std::vector<int32_t> first((size_t)unique_vertices, -1);
-    for (size_t i = 0; i < indices.size(); ++i) {
-        uint32_t ui = indices[i];
-        if (ui < unique_vertices && first[ui] < 0) first[ui] = (int32_t)i;
+
+    // `ufbx_generate_indices()` compacts the vertex stream in-place so the
+    // deduplicated vertices are in `corner_keys[0..unique_vertices)`. The `indices`
+    // array maps old corner vertex -> new unique vertex.
+    std::vector<int32_t> rep((size_t)unique_vertices, -1);
+    for (size_t ci = 0; ci < indices.size(); ++ci)
+    {
+        uint32_t ui = indices[ci];
+        if (ui < unique_vertices && rep[ui] < 0) rep[ui] = (int32_t)ci;
     }
 
     std::vector<TempVertexKey> unique_keys(unique_vertices);
@@ -106,10 +115,10 @@ bool BakedMeshImporter::ImportMesh(const ufbx_scene* /*scene*/, const ufbx_mesh*
 
     for (size_t ui = 0; ui < unique_vertices; ++ui)
     {
-        int32_t src = first[ui];
-        if (src < 0) src = 0;
+        unique_keys[ui] = corner_keys[ui];
 
-        unique_keys[ui] = corner_keys[(size_t)src];
+        int32_t src = rep[ui];
+        if (src < 0) src = 0;
         out_result.fbx_corner_index_of_runtime[ui] = corner_corner[(size_t)src];
         out_result.fbx_control_point_index_of_runtime[ui] = corner_cp[(size_t)src];
     }

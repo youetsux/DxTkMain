@@ -28,7 +28,7 @@ void FbxMeshGroup::RecalcBounds()
 {
     bounds_.Reset();
 
-    // ‘S bind_vertices ‚ğär‚ß‚Ä AABB ‚ğì‚è’¼‚·iBVolume ‚Ì min/max –¼‚ÉˆË‘¶‚µ‚È‚¢j
+
     for (const auto& m : meshes_) {
         if (!m) continue;
 

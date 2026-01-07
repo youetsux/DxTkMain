@@ -1,7 +1,7 @@
 #include "GameObject.h"
 
 //-----------------------------------------------------------
-// コンストラクタ / デストラクタ
+
 //-----------------------------------------------------------
 GameObject::GameObject(GameObject* parent, const std::string& name)
     : name_(name)
@@ -30,7 +30,7 @@ void GameObject::AddComponent(Component* component)
 }
 
 //-----------------------------------------------------------
-// 親子
+
 //-----------------------------------------------------------
 void GameObject::AddChild(GameObject* child)
 {
@@ -42,12 +42,12 @@ void GameObject::AddChild(GameObject* child)
 }
 
 //-----------------------------------------------------------
-// ツリー更新
+
 //-----------------------------------------------------------
 void GameObject::UpdateSub()
 {
     Update();
-    // ★ここで Transform を計算
+
     transform_.Calculation();
 
     for (Component* c : components_)

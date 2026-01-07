@@ -1,4 +1,4 @@
-﻿#include "Model.h"
+#include "Model.h"
 #include "FbxModel.h"
 #include "Camera.h"
 #include "Input.h"

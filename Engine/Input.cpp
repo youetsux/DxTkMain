@@ -32,7 +32,7 @@ namespace Input
     {
         if (!g_keyboard) return;
 
-        // ★これが無いと GetState が更新されない環境がある
+
         g_keyboard->ProcessMessage(message, wParam, lParam);
     }
 
@@ -44,7 +44,7 @@ namespace Input
         g_tracker.Update(g_state);
     }
 
-    // --- VK_*（int）---
+
     bool IsKey(int vk) { return IsKey(VkToDxKey(vk)); }
     bool IsKeyDown(int vk) { return IsKeyDown(VkToDxKey(vk)); }
     bool IsKeyUp(int vk) { return IsKeyUp(VkToDxKey(vk)); }

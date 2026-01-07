@@ -1,31 +1,31 @@
-﻿#include "FbxSkeleton.h"
+#include "FbxSkeleton.h"
 #include "ufbx.h"
 #include "UfbxUtil.h"
-#include "Gfx.h"        // DrawDebug �実装時に使う想定（今は未使用）
+#include "Gfx.h"
 #include <Effects.h>
 
 #include <unordered_map>
 
 //------------------------------------------------------------
-// 内部ヘルパ（匿名名前空間）
+
 //------------------------------------------------------------
 namespace
 {
-    // ボーン登録ヘルパ
-    // ・ufbx_node を SkeletonData に追加し、そのインデックスを返す
-    // ・すでに登録されている場合は既存のインデックスを返す
+
+
+
     int AddBoneInternal(
         const ufbx_node* node,
         SkeletonData& skeleton,
         std::unordered_map<const ufbx_node*, int>& index_of)
     {
-        // すでに登録済みかチェック
+
         auto it = index_of.find(node);
         if (it != index_of.end()) {
             return it->second;
         }
 
-        // 新しいボーンとして追加
+
         int idx = static_cast<int>(skeleton.bones_.size());
         index_of.insert(std::make_pair(node, idx));
 
@@ -36,8 +36,8 @@ namespace
     }
 
 
-    // 旧デバッグ描画
-    std::vector<BoneInfo>        m_bones;     // 旧の基本情報
+
+    std::vector<BoneInfo>        m_bones;
     std::vector<DirectX::XMFLOAT4X4> m_currWorld; // W_i(t)
 
     std::unique_ptr<DirectX::DX11::BasicEffect> m_debugFx;
@@ -45,7 +45,7 @@ namespace
     Microsoft::WRL::ComPtr<ID3D11Buffer>        m_boneVB;
     size_t m_boneVBSize = 0;
 
-    // 既存の AddBoneInternal や m_debugFx, m_boneVBSize などに続けて…
+
     Microsoft::WRL::ComPtr<ID3D11DepthStencilState> g_skelDepthState; // Z test on / Z write off
 }
 
@@ -82,7 +82,7 @@ std::vector<DirectX::XMMATRIX>& FbxSkeleton::SkinMatrices()
 
 bool FbxSkeleton::BuildFromScene(const ufbx_scene* scene)
 {
-    // いったん全部クリア
+
     data_.bones_.clear();
     data_.curr_world_.clear();
     data_.bone_index_of_.clear();
@@ -93,33 +93,33 @@ bool FbxSkeleton::BuildFromScene(const ufbx_scene* scene)
         return false;
     }
 
-    // ufbx_node* → ボーンインデックス の一時マップ
+
     std::unordered_map<const ufbx_node*, int> index_of;
 
-    // 全ノードをループ
+
     for (size_t ni = 0; ni < scene->nodes.count; ++ni) {
         const ufbx_node* node = scene->nodes.data[ni];
         const ufbx_mesh* mesh = node->mesh;
-        if (!mesh) continue; // メッシュを持たないノードはスキップ
+        if (!mesh) continue;
 
-        // メッシュについているスキンデフォーマを全て見る
+
         for (size_t si = 0; si < mesh->skin_deformers.count; ++si) {
             const ufbx_skin_deformer* skin = mesh->skin_deformers.data[si];
 
-            // 各クラスター（ボーン支配頂点群）の情報を見る
+
             for (size_t ci = 0; ci < skin->clusters.count; ++ci) {
                 const ufbx_skin_cluster* cl = skin->clusters.data[ci];
                 if (!cl->bone_node) continue;
 
-                // このクラスターのボーンを SkeletonData に登録
+
                 int bi = AddBoneInternal(
                     cl->bone_node, data_, index_of);
 
-                // ボーン側のバインド姿勢（ボーンのワールド行列）
+
                 data_.bones_[bi].bind_world =
                     UfbxUtil::ToXMMatrix(cl->bind_to_world);
 
-                // バインド姿勢の逆行列も作っておく
+
                 {
                     DirectX::XMMATRIX B =
                         DirectX::XMLoadFloat4x4(&data_.bones_[bi].bind_world);
@@ -128,11 +128,11 @@ bool FbxSkeleton::BuildFromScene(const ufbx_scene* scene)
                         &data_.bones_[bi].inv_bind_world, B_inv);
                 }
 
-                // ジオメトリ → ボーン の変換行列
+
                 data_.bones_[bi].geom_bind_world =
                     UfbxUtil::ToXMMatrix(cl->geometry_to_bone);
 
-                // その逆行列
+
                 {
                     DirectX::XMMATRIX G =
                         DirectX::XMLoadFloat4x4(&data_.bones_[bi].geom_bind_world);
@@ -141,7 +141,7 @@ bool FbxSkeleton::BuildFromScene(const ufbx_scene* scene)
                         &data_.bones_[bi].inv_geom_bind_world, G_inv);
                 }
 
-                // 親ボーンとの関係（親があればインデックスを調べてセット）
+
                 if (cl->bone_node->parent) {
                     auto itp = index_of.find(cl->bone_node->parent);
                     if (itp != index_of.end()) {
@@ -152,18 +152,18 @@ bool FbxSkeleton::BuildFromScene(const ufbx_scene* scene)
         }
     }
 
-    // ボーンが 1 本も無ければ、そのまま true（メッシュだけのモデル対応）
+
     if (data_.bones_.empty()) {
         return true;
     }
 
-    // 現在姿勢・スキン行列用配列をボーン数に合わせて確保
+
     data_.curr_world_.resize(data_.bones_.size());
     data_.skin_mats_.resize(data_.bones_.size());
 
-    // ufbx_node* → uint16_t ボーン番号 のマップを作る
+
     for (size_t i = 0; i < data_.bones_.size(); ++i) {
-        // 初期姿勢はバインド姿勢
+
         data_.curr_world_[i] = data_.bones_[i].bind_world;
 
         if (data_.bones_[i].node && i < 0x10000) {
@@ -185,7 +185,7 @@ void FbxSkeleton::UpdateAtTime(const ufbx_scene* scene, const ufbx_anim* anim, d
     const auto t0 = clock::now();
 #endif
 
-    // t をアニメーション時間の範囲にクランプ
+
     double t = t_sec;
     if (anim->time_end > anim->time_begin)
     {
@@ -197,16 +197,16 @@ void FbxSkeleton::UpdateAtTime(const ufbx_scene* scene, const ufbx_anim* anim, d
     const auto t1 = clock::now();
 #endif
 
-    // 計算済みノードの結果を溜めるキャッシュ（フォールバック用）
+
     auto& cache = data_.node_world_cache_;
     cache.clear();
     if (cache.bucket_count() < data_.bones_.size() * 2)
     {
-        cache.reserve(data_.bones_.size() * 2); // rehash 回避（挙動不変）
+        cache.reserve(data_.bones_.size() * 2);
     }
 
-    // ufbx 側でシーン全体を評価（ノードの node_to_world を更新したシーンを得る）
-    // 失敗時は従来の EvaluateNodeWorldRecursive() にフォールバックする
+
+
     ufbx_error error = {};
     ufbx_scene* eval_scene = ufbx_evaluate_scene(scene, anim, t, nullptr, &error);
 
@@ -216,13 +216,13 @@ void FbxSkeleton::UpdateAtTime(const ufbx_scene* scene, const ufbx_anim* anim, d
 
     const size_t bone_count = data_.bones_.size();
 
-    // まず容量だけ確保して、再確保スパイクを抑える（挙動不変）
+
     if (data_.curr_world_.capacity() < bone_count)
     {
         data_.curr_world_.reserve(bone_count);
     }
 
-    // size を揃える（必要なときだけ）
+
     if (data_.curr_world_.size() != bone_count)
     {
         data_.curr_world_.resize(bone_count);
@@ -236,8 +236,8 @@ void FbxSkeleton::UpdateAtTime(const ufbx_scene* scene, const ufbx_anim* anim, d
 
     if (eval_scene)
     {
-        // eval_scene のノード配列は typed_id で参照できる
-        // node_to_world をそのままコピーする（親継承/インヘリット等は ufbx が反映済み）
+
+
         for (size_t i = 0; i < bone_count; ++i)
         {
             const ufbx_node* node = data_.bones_[i].node;
@@ -271,7 +271,7 @@ void FbxSkeleton::UpdateAtTime(const ufbx_scene* scene, const ufbx_anim* anim, d
     }
     else
     {
-        // ルート(親なし)を先に評価してキャッシュを温める
+
         for (size_t i = 0; i < bone_count; ++i)
         {
             const BoneInfo& b = data_.bones_[i];
@@ -297,7 +297,7 @@ void FbxSkeleton::UpdateAtTime(const ufbx_scene* scene, const ufbx_anim* anim, d
 #endif
         }
 
-        // 残りを評価
+
         for (size_t i = 0; i < bone_count; ++i)
         {
             const BoneInfo& b = data_.bones_[i];
@@ -389,18 +389,18 @@ void FbxSkeleton::UpdateAtTime(const ufbx_scene* scene, const ufbx_anim* anim, d
 
 namespace {
     // ------------------------------------------------------------
-    // 旧の位置/変換ヘルパ（DrawSkeleton で使う）
+
     // ------------------------------------------------------------
     DirectX::XMFLOAT3 GetBonePosition(const DirectX::XMFLOAT4X4& M)
     {
-        // 行列の第4行の xyz が平行移動成分
+
         DirectX::XMFLOAT3 p;
         p.x = M._41;
         p.y = M._42;
         p.z = M._43;
         return p;
     }
-    // 任意の点 v を行列 M で変換
+
     DirectX::XMFLOAT3 TransformPoint(
         const DirectX::XMFLOAT4X4& M,
         const DirectX::XMFLOAT3& v)
@@ -434,7 +434,7 @@ void FbxSkeleton::DrawDebug(
     if (!ctx) return;
     if (data_.bones_.empty()) return;
 
-    // ---------- BasicEffect / VB 初期化 ----------
+
     if (!m_debugFx)
     {
         ID3D11Device* dev = nullptr;
@@ -470,7 +470,7 @@ void FbxSkeleton::DrawDebug(
         dev->Release();
     }
 
-    // ---------- ライン頂点を組み立て ----------
+
     std::vector<DebugVC> lines;
     lines.reserve(data_.bones_.size() * 8);
 
@@ -507,7 +507,7 @@ void FbxSkeleton::DrawDebug(
 
     if (lines.empty()) return;
 
-    // ---------- VB 再確保 ----------
+
     if (m_boneVBSize < lines.size())
     {
         m_boneVB.Reset();
@@ -528,7 +528,7 @@ void FbxSkeleton::DrawDebug(
         dev->Release();
     }
 
-    // ---------- VB 書き込み ----------
+
     D3D11_MAPPED_SUBRESOURCE mapped;
     if (SUCCEEDED(ctx->Map(
         m_boneVB.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
@@ -538,7 +538,7 @@ void FbxSkeleton::DrawDebug(
         ctx->Unmap(m_boneVB.Get(), 0);
     }
 
-    // ---------- DepthState: Z 完全 OFF で常時描き！ ----------
+
     static Microsoft::WRL::ComPtr<ID3D11DepthStencilState> s_depthOff;
 
     if (!s_depthOff)
@@ -548,8 +548,8 @@ void FbxSkeleton::DrawDebug(
         if (!dev) return;
 
         D3D11_DEPTH_STENCIL_DESC ds{};
-        ds.DepthEnable = FALSE;                         // ★ Zテストしない
-        ds.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;   // 書き込みなし
+        ds.DepthEnable = FALSE;
+        ds.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
         ds.StencilEnable = FALSE;
 
         dev->CreateDepthStencilState(&ds, s_depthOff.GetAddressOf());
@@ -562,7 +562,7 @@ void FbxSkeleton::DrawDebug(
 
     ctx->OMSetDepthStencilState(s_depthOff.Get(), 0);
 
-    // ---------- 描画 ----------
+
     UINT stride = sizeof(DebugVC);
     UINT offset = 0;
 
@@ -577,6 +577,6 @@ void FbxSkeleton::DrawDebug(
     m_debugFx->Apply(ctx);
     ctx->Draw((UINT)lines.size(), 0);
 
-    // depth state 戻す
+
     ctx->OMSetDepthStencilState(oldDSS.Get(), oldRef);
 }

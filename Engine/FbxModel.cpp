@@ -277,7 +277,7 @@ bool FbxModel::LoadBaked(const char* fbx_path)
             }
 
             std::unique_ptr<FbxMesh> sub = std::make_unique<FbxMesh>();
-            if (!sub->BuildFromBaked(baked, fbx_path)) {
+            if (!sub->BuildFromBaked(baked, scene, fbx_path)) {
                 return false;
             }
 
@@ -314,7 +314,7 @@ bool FbxModel::LoadBaked(const char* fbx_path)
             return false;
         }
 
-        if (!mesh_.BuildFromBaked(baked, fbx_path)) {
+        if (!mesh_.BuildFromBaked(baked, scene, fbx_path)) {
             return false;
         }
     }
