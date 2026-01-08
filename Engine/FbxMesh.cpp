@@ -769,6 +769,32 @@ bool FbxMesh::BuildFromBaked(const BakedMeshImportResult& src, const ufbx_scene*
 
 	mesh_.indices_ = src.indices;
 
+
+	// Skinning (baked): store bind/skinned vertices and influences if present
+	has_skinning_ = !src.skin.empty();
+	skin_bones_remapped_ = false;
+	mesh_.skin_bone_node_element_ids_.clear();
+
+	if (has_skinning_) {
+		// Copy bind vertices (original) and allocate skinned buffer
+		mesh_.bind_vertices_ = mesh_.vertices_;
+		mesh_.skinned_vertices_ = mesh_.vertices_;
+
+		// Local bone index -> ufbx_node::element_id (hybrid mapping)
+		mesh_.skin_bone_node_element_ids_ = src.skin_bone_node_element_ids;
+
+		// Vertex influences (local bone indices + weights)
+		mesh_.influences_.resize(src.skin.size());
+		for (size_t i = 0; i < src.skin.size(); ++i) {
+			VertexInfluence inf{};
+			for (int k = 0; k < 4; ++k) {
+				inf.bone[k] = src.skin[i].bone[k];
+				inf.weight[k] = src.skin[i].weight[k];
+			}
+			mesh_.influences_[i] = inf;
+		}
+	}
+
 	// パーツ（サブメッシュ範囲）を反映
 	if (!src.submeshes.empty())
 	{
@@ -1334,6 +1360,49 @@ void FbxMesh::UpdateSkinningIfNeeded(
 	// 影響情報が無い / バインド頂点が無いなら更新できない
 	if (mesh_.influences_.empty()) return;
 	if (mesh_.bind_vertices_.empty()) return;
+
+	// For baked meshes, influences may store local bone indices (0..N) that need remapping
+	// to skeleton bone indices. Do this once.
+	if (!skin_bones_remapped_ && !mesh_.skin_bone_node_element_ids_.empty()) {
+		std::unordered_map<uint32_t, uint16_t> element_to_bone;
+		element_to_bone.reserve(skeleton.Bones().size());
+		for (uint16_t i = 0; i < (uint16_t)skeleton.Bones().size(); ++i) {
+			const ufbx_node* n = skeleton.Bones()[i].node;
+			if (!n) continue;
+			element_to_bone[(uint32_t)n->element_id] = i;
+		}
+
+		std::vector<uint16_t> remap(mesh_.skin_bone_node_element_ids_.size(), 0xFFFF);
+		for (size_t i = 0; i < mesh_.skin_bone_node_element_ids_.size(); ++i) {
+			uint32_t eid = mesh_.skin_bone_node_element_ids_[i];
+			auto it = element_to_bone.find(eid);
+			if (it != element_to_bone.end()) remap[i] = it->second;
+		}
+
+		// Remap influences in-place, dropping missing bones
+		for (auto& inf : mesh_.influences_) {
+			float sum = 0.0f;
+			for (int k = 0; k < 4; ++k) {
+				float w = inf.weight[k];
+				if (w <= 0.0f) { inf.weight[k] = 0.0f; inf.bone[k] = 0; continue; }
+				uint16_t local = inf.bone[k];
+				uint16_t sk = (local < remap.size()) ? remap[local] : 0xFFFF;
+				if (sk == 0xFFFF) {
+					inf.weight[k] = 0.0f;
+					inf.bone[k] = 0;
+				}
+				else {
+					inf.bone[k] = sk;
+					sum += inf.weight[k];
+				}
+			}
+			if (sum > 0.0f) {
+				float inv = 1.0f / sum;
+				for (int k = 0; k < 4; ++k) inf.weight[k] *= inv;
+			}
+		}
+		skin_bones_remapped_ = true;
+	}
 
 	// ボーン数に合わせてスキン行列配列を準備
 	auto& skin_mats = skeleton.SkinMatrices();

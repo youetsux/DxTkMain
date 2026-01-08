@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include <cstdint>
 #include <vector>
 #include <string>
@@ -13,10 +13,13 @@ struct BakedMeshImportResult
         uint32_t index_start = 0;
         uint32_t index_count = 0;
         uint32_t material_index = 0;
-        // UV set index used for baking vertex UVs.
-        // 0 = mesh->vertex_uv (also mesh->uv_sets[0] if present)
-        uint32_t uv_set_index = 0;
     };
+    struct BakedVertexSkin
+    {
+        std::uint16_t bone[4] = { 0, 0, 0, 0 };
+        float weight[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+    };
+
 
     std::string name;
 
@@ -29,6 +32,10 @@ struct BakedMeshImportResult
 
     std::vector<std::uint32_t> fbx_control_point_index_of_runtime;
     std::vector<std::uint32_t> fbx_corner_index_of_runtime;
+
+    // Skinning: runtime vertex -> up to 4 bone influences (indices into skin_bone_node_element_ids)
+    std::vector<std::uint32_t> skin_bone_node_element_ids;
+    std::vector<BakedVertexSkin> skin;
 
     bool IsValid() const
     {

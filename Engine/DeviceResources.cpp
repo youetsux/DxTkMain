@@ -1,4 +1,4 @@
-#define WIN32_LEAN_AND_MEAN
+﻿#define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>
 #include <d3d11.h>
@@ -94,5 +94,5 @@ void DeviceResources::WindowSizeChanged(unsigned int w, unsigned int h)
 
 void DeviceResources::Present()
 {
-    m_swapChain->Present(0, 0);
+    m_swapChain->Present(1, 0);
 }

@@ -2,6 +2,9 @@
 
 #include "ufbx.h"
 
+#include "UfbxUtil.h"
+#include <Windows.h>
+
 #include <cstring>
 #include <algorithm>
 
@@ -14,7 +17,7 @@ namespace
         float u, v;
     };
 
-    static TempVertexKey MakeKey(const ufbx_mesh* mesh, uint32_t index)
+    static TempVertexKey MakeKey(const ufbx_mesh* mesh, uint32_t index, const ufbx_vertex_vec2* uv_stream, const ufbx_matrix* uv_to_texture)
     {
         TempVertexKey k{};
         if (mesh->vertex_position.exists) {
@@ -24,18 +27,86 @@ namespace
         if (mesh->vertex_normal.exists) {
             ufbx_vec3 n = ufbx_get_vertex_vec3(&mesh->vertex_normal, (size_t)index);
             k.nx = (float)n.x; k.ny = (float)n.y; k.nz = (float)n.z;
-        }
-        if (mesh->vertex_uv.exists) {
-            ufbx_vec2 uv = ufbx_get_vertex_vec2(&mesh->vertex_uv, (size_t)index);
-            k.u = (float)uv.x; k.v = 1.0f - (float)uv.y;
+        }        if (uv_stream && uv_stream->exists) {
+            ufbx_vec2 uv = ufbx_get_vertex_vec2(uv_stream, (size_t)index);
+            if (uv_to_texture) {
+                ufbx_vec3 uvw = { (ufbx_real)uv.x, (ufbx_real)uv.y, (ufbx_real)0.0 };
+                ufbx_vec3 tuv = ufbx_transform_position(uv_to_texture, uvw);
+                k.u = (float)tuv.x;
+                k.v = (float)tuv.y;
+            }
+            else {
+                k.u = (float)uv.x;
+                k.v = (float)uv.y;
+            }
+
+            // FBX/DCC UV convention (V up) -> DirectX convention (V down)
+            k.v = 1.0f - k.v;
         }
         return k;
     }
 }
 
-bool BakedMeshImporter::ImportMesh(const ufbx_scene* /*scene*/, const ufbx_mesh* mesh, BakedMeshImportResult& out_result)
+bool BakedMeshImporter::ImportMesh(const ufbx_scene* scene, const ufbx_mesh* mesh, BakedMeshImportResult& out_result)
 {
     if (!mesh) return false;
+
+    const ufbx_material* mat = nullptr;
+    const ufbx_texture* tex = nullptr;
+    if (scene && mesh->materials.count > 0) {
+        mat = mesh->materials.data[0];
+        tex = UfbxUtil::GetDiffuseTexture(mat);
+    }
+
+    uint32_t uv_set_index = 0;
+    if (tex && tex->uv_set.length > 0 && tex->uv_set.data && mesh->uv_sets.count > 0) {
+        for (size_t i = 0; i < mesh->uv_sets.count; ++i) {
+            const ufbx_uv_set& us = mesh->uv_sets.data[i];
+            if (us.name.length == tex->uv_set.length && us.name.data && tex->uv_set.data) {
+                if (std::memcmp(us.name.data, tex->uv_set.data, tex->uv_set.length) == 0) {
+                    uv_set_index = (uint32_t)i;
+                    break;
+                }
+            }
+        }
+    }
+
+    const ufbx_vertex_vec2* uv_stream = nullptr;
+    if (mesh->uv_sets.count > 0 && uv_set_index < (uint32_t)mesh->uv_sets.count) {
+        uv_stream = &mesh->uv_sets.data[uv_set_index].vertex_uv;
+    }
+    else if (mesh->vertex_uv.exists) {
+        uv_stream = &mesh->vertex_uv;
+    }
+
+
+    // ---- UV/TEXTURE debug (no behavior change) ----
+    if (tex) {
+        char buf[512];
+        sprintf_s(buf,
+            "BakedMeshImporter: tex='%s' uv_set='%s' has_uv_transform=%d wrap_u=%d wrap_v=%d uv_sets=%u selected_uv=%u\n",
+            tex->filename.data ? tex->filename.data : "(nofile)",
+            tex->uv_set.data ? tex->uv_set.data : "(none)",
+            tex->has_uv_transform ? 1 : 0,
+            (int)tex->wrap_u, (int)tex->wrap_v,
+            (unsigned)mesh->uv_sets.count, (unsigned)uv_set_index);
+        OutputDebugStringA(buf);
+
+        if (tex->has_uv_transform) {
+            const ufbx_matrix* mt = &tex->uv_to_texture;
+            sprintf_s(buf,
+                "  uv_to_texture: [%g %g %g %g] [%g %g %g %g] [%g %g %g %g]\n",
+                (double)mt->m00, (double)mt->m01, (double)mt->m02, (double)mt->m03,
+                (double)mt->m10, (double)mt->m11, (double)mt->m12, (double)mt->m13,
+                (double)mt->m20, (double)mt->m21, (double)mt->m22, (double)mt->m23);
+            OutputDebugStringA(buf);
+        }
+    }
+    // ----------------------------------------------
+    const ufbx_matrix* uv_to_texture = nullptr;
+    if (tex && tex->has_uv_transform) {
+        uv_to_texture = &tex->uv_to_texture;
+    }
 
     out_result = BakedMeshImportResult{};
     if (mesh->name.length > 0 && mesh->name.data) {
@@ -72,7 +143,7 @@ bool BakedMeshImporter::ImportMesh(const ufbx_scene* /*scene*/, const ufbx_mesh*
                 // `ufbx_triangulate_face()` outputs indices in the mesh "index" domain
                 // (0..mesh->num_indices-1). Use those directly to fetch split attributes.
                 const uint32_t index_ix = tri_indices[(size_t)base + (size_t)k];
-                corner_keys.push_back(MakeKey(mesh, index_ix));
+                corner_keys.push_back(MakeKey(mesh, index_ix, uv_stream, uv_to_texture));
 
                 // Logical vertex index (control point) corresponding to this split index.
                 uint32_t cp_ix = 0;

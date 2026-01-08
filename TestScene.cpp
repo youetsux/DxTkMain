@@ -24,14 +24,14 @@ void TestScene::Initialize()
     Camera::SetTarget({ 0.0, 1.0, 0.0 });
 
     actor_ = new GameObject(&Root(), "Actor");
-    auto mc = new ModelComponent(actor_, "Assets/BoyJump.fbx", 1.0f);
+    auto mc = new ModelComponent(actor_, "Assets/BoyJump.fbx", true);
 
 
     actor_->AddComponent(mc);
 
-
-    actor_->GetTransform().position_ = { 0.0f, 0.5f, 0.0f };
-    actor_->GetTransform().scale_ = { 1.0f, 1.0f, 1.0f };
+    actor_->GetTransform().position_ = { 0.0f, 0.7f, 0.0f };
+    actor_->GetTransform().rotate_ = { 90, 0, 0 };
+    actor_->GetTransform().scale_ = { 0.8f, 0.8f, 0.8f };
     mc->SetAnimStack(0);
     mc->SetAnimRange(0, 92, 1.0f);
     mc->SetLoop(true);
@@ -56,9 +56,9 @@ void TestScene::Initialize()
 
 
     actor3_->AddComponent(mc3);
-    //mc3->SetAnimStack(1);
-    //mc3->SetAnimRange(0, 229, 1.0f);
-    //mc3->SetLoop(true);
+    mc3->SetAnimStack(1);
+    mc3->SetAnimRange(0, 229, 1.0f);
+    mc3->SetLoop(true);
 
     actor3_->GetTransform().position_ = { -1.0f, 0.0f, 0.0f };
     actor3_->GetTransform().scale_ = { 0.01f,0.01f,0.01f };

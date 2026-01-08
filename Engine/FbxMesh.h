@@ -82,6 +82,9 @@ public:
         std::vector<VertexInfluence>  influences_;
         std::vector<VertexPNT2>       bind_vertices_;
         std::vector<VertexPNT2>       skinned_vertices_;
+
+        // For baked skinning: local bone index -> ufbx_node::element_id
+        std::vector<uint32_t>         skin_bone_node_element_ids_;
     };
 
 public:
@@ -104,9 +107,6 @@ public:
     // Build mesh from baked importer result (static mesh, no skinning).
     // Step: Debug visualization path. Existing behavior unchanged unless called.
     bool BuildFromBaked(const BakedMeshImportResult& src, const char* fbx_path = nullptr);
-
-    // Optional overload: allows passing the loaded scene for material/texture lookup.
-    // Default implementation ignores `scene` and forwards to the 2-arg overload.
     bool BuildFromBaked(const BakedMeshImportResult& src, const ufbx_scene* scene, const char* fbx_path = nullptr);
 
     void Draw(
@@ -237,6 +237,7 @@ private:
 
     BVolume bounds_;
     bool    has_skinning_ = false;
+    bool    skin_bones_remapped_ = false;
     bool    force_checker_texture_ = false;
 };
 
