@@ -4,6 +4,7 @@
 
 #include "FbxModel.h"
 #include "BakedRig.h"
+#include "BakedAnim.h"
 #include "BakedMeshImporter.h"
 
 #include <cstring>
@@ -243,6 +244,127 @@ bool FbxModel::LoadBaked(const char* fbx_path)
     if (!skeleton_.BuildFromScene(scene)) {
         return false;
     }
+
+    // StepA-3: Extract rest local transforms for all nodes into baked_rig_ (unused yet)
+    baked_rig_ = std::make_unique<BakedRig>();
+    baked_rig_->nodes.clear();
+    baked_rig_->nodes.resize(scene->nodes.count);
+
+    // element_id values are indexes into scene->elements
+    baked_rig_->element_id_to_node.clear();
+    baked_rig_->element_id_to_node.resize(scene->elements.count, 0xFFFFFFFFu);
+
+    for (size_t i = 0; i < scene->nodes.count; ++i)
+    {
+        const ufbx_node* node = scene->nodes.data[i];
+        if (!node) continue;
+
+        uint32_t node_index = node->typed_id;
+        if (node_index >= baked_rig_->nodes.size()) continue;
+
+        BakedRigNode& dst = baked_rig_->nodes[node_index];
+        dst.element_id = node->element_id;
+
+        if (node->element_id < baked_rig_->element_id_to_node.size()) {
+            baked_rig_->element_id_to_node[node->element_id] = node_index;
+        }
+
+        dst.parent = node->parent ? node->parent->typed_id : 0xFFFFFFFFu;
+
+        const ufbx_transform& lt = node->local_transform;
+        dst.t[0] = (float)lt.translation.x;
+        dst.t[1] = (float)lt.translation.y;
+        dst.t[2] = (float)lt.translation.z;
+
+        dst.r[0] = (float)lt.rotation.x;
+        dst.r[1] = (float)lt.rotation.y;
+        dst.r[2] = (float)lt.rotation.z;
+        dst.r[3] = (float)lt.rotation.w;
+
+        dst.s[0] = (float)lt.scale.x;
+        dst.s[1] = (float)lt.scale.y;
+        dst.s[2] = (float)lt.scale.z;
+    }
+
+    // StepB-3: Bake first available animation into baked_anim_clip_ (unused yet)
+    baked_anim_clip_.reset();
+
+    const ufbx_anim* bake_anim = nullptr;
+    if (scene->anim_stacks.count > 0) {
+        const ufbx_anim_stack* st = scene->anim_stacks.data[0];
+        if (st) bake_anim = st->anim;
+    }
+    if (!bake_anim) {
+        bake_anim = scene->anim;
+    }
+
+    if (bake_anim) {
+        ufbx_bake_opts opts;
+        std::memset(&opts, 0, sizeof(opts));
+
+        ufbx_error bake_error;
+        std::memset(&bake_error, 0, sizeof(bake_error));
+
+        ufbx_baked_anim* baked = ufbx_bake_anim(scene, bake_anim, &opts, &bake_error);
+        if (baked) {
+            baked_anim_clip_ = std::make_unique<BakedAnimClip>();
+            baked_anim_clip_->start_time = (float)baked->playback_time_begin;
+            baked_anim_clip_->end_time = (float)baked->playback_time_end;
+            baked_anim_clip_->duration = (float)baked->playback_duration;
+            baked_anim_clip_->sample_rate = 0.0f;
+
+            baked_anim_clip_->channels.clear();
+            baked_anim_clip_->channels.reserve(baked->nodes.count);
+
+            for (size_t ni = 0; ni < baked->nodes.count; ++ni)
+            {
+                const ufbx_baked_node& bn = baked->nodes.data[ni];
+
+                BakedAnimChannel ch;
+                ch.node_index = bn.typed_id;
+
+                ch.translation_keys.reserve(bn.translation_keys.count);
+                for (size_t ki = 0; ki < bn.translation_keys.count; ++ki) {
+                    const ufbx_baked_vec3& k = bn.translation_keys.data[ki];
+                    BakedVec3Key dk;
+                    dk.time = (float)k.time;
+                    dk.v[0] = (float)k.value.x;
+                    dk.v[1] = (float)k.value.y;
+                    dk.v[2] = (float)k.value.z;
+                    ch.translation_keys.push_back(dk);
+                }
+
+                ch.rotation_keys.reserve(bn.rotation_keys.count);
+                for (size_t ki = 0; ki < bn.rotation_keys.count; ++ki) {
+                    const ufbx_baked_quat& k = bn.rotation_keys.data[ki];
+                    BakedQuatKey dk;
+                    dk.time = (float)k.time;
+                    dk.q[0] = (float)k.value.x;
+                    dk.q[1] = (float)k.value.y;
+                    dk.q[2] = (float)k.value.z;
+                    dk.q[3] = (float)k.value.w;
+                    ch.rotation_keys.push_back(dk);
+                }
+
+                ch.scale_keys.reserve(bn.scale_keys.count);
+                for (size_t ki = 0; ki < bn.scale_keys.count; ++ki) {
+                    const ufbx_baked_vec3& k = bn.scale_keys.data[ki];
+                    BakedVec3Key dk;
+                    dk.time = (float)k.time;
+                    dk.v[0] = (float)k.value.x;
+                    dk.v[1] = (float)k.value.y;
+                    dk.v[2] = (float)k.value.z;
+                    ch.scale_keys.push_back(dk);
+                }
+
+                baked_anim_clip_->channels.push_back(ch);
+            }
+
+            ufbx_free_baked_anim(baked);
+        }
+    }
+
+
 
     // Count mesh nodes
     size_t mesh_node_count = 0;

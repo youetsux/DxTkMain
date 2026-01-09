@@ -4,6 +4,7 @@
 #include <memory>
 
 struct BakedRig;
+struct BakedAnimClip;
 #include <string>
 
 #include <DirectXMath.h>
@@ -123,6 +124,7 @@ private:
     // ufbx V[{́iFbxSkeleton / FbxMesh ͂QƂč\zj
     std::unique_ptr<ufbx_scene, void(*)(ufbx_scene*)> scene_{ nullptr, ufbx_free_scene };
     std::unique_ptr<BakedRig> baked_rig_;
+    std::unique_ptr<BakedAnimClip> baked_anim_clip_;
 
     // {[Aj[V
     FbxSkeleton skeleton_;
