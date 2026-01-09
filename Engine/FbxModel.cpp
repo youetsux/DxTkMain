@@ -3,6 +3,7 @@
 #include <Windows.h>
 
 #include "FbxModel.h"
+#include "BakedRig.h"
 #include "BakedMeshImporter.h"
 
 #include <cstring>
