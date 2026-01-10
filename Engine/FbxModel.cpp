@@ -6,6 +6,7 @@
 #include "BakedRig.h"
 #include "BakedAnim.h"
 #include "BakedMeshImporter.h"
+#include "BakedDataValidate.h"
 
 #include <cstring>
 #include <cfloat>
@@ -541,4 +542,39 @@ void FbxModel::DrawSkeleton(
     const DirectX::XMMATRIX& proj)
 {
     skeleton_.DrawDebug(world, view, proj);
+}
+
+bool FbxModel::ValidateBakedData(std::string& out_error) const
+{
+    out_error.clear();
+    if (!baked_rig_)
+    {
+        out_error = "baked_rig_: null";
+        return false;
+    }
+
+    return BakedDataValidate::ValidateRigAndClip(*baked_rig_, baked_anim_clip_.get(), out_error);
+}
+
+void FbxModel::DiscardScene()
+{
+    scene_.reset();
+}
+
+bool FbxModel::ValidateAndDiscard(std::string& out_error)
+{
+    if (!ValidateBakedData(out_error))
+        return false;
+
+    DiscardScene();
+    return true;
+}
+
+bool FbxModel::LoadBakedAndDiscard(const char* fbx_path, std::string& out_error)
+{
+    out_error.clear();
+    if (!LoadBaked(fbx_path))
+        return false;
+
+    return ValidateAndDiscard(out_error);
 }

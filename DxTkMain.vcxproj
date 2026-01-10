@@ -130,7 +130,9 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Engine\BakedAnim.h" />
+    <ClInclude Include="Engine\BakedDataValidate.h" />
     <ClInclude Include="Engine\BakedMeshImporter.h" />
+    <ClInclude Include="Engine\BakedPose.h" />
     <ClInclude Include="Engine\BakedPoseEval.h" />
     <ClInclude Include="Engine\BakedPoseEvalTest.h" />
     <ClInclude Include="Engine\BakedRig.h" />
@@ -164,6 +166,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Engine\BakedAnim.cpp" />
+    <ClCompile Include="Engine\BakedDataValidate.cpp" />
     <ClCompile Include="Engine\BakedMeshImporter.cpp" />
     <ClCompile Include="Engine\BakedPoseEval.cpp" />
     <ClCompile Include="Engine\BakedPoseEvalTest.cpp" />

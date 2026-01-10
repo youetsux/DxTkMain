@@ -52,6 +52,14 @@ public:
     // Baked import path (new, unused unless called explicitly)
     bool LoadBaked(const char* fbx_path);
 
+    // Helper: LoadBaked() then ValidateAndDiscard() (unused unless called explicitly).
+    bool LoadBakedAndDiscard(const char* fbx_path, std::string& out_error);
+
+    // Baked data validation for scene discard (unused unless called explicitly).
+    bool ValidateBakedData(std::string& out_error) const;
+    void DiscardScene();
+    bool ValidateAndDiscard(std::string& out_error);
+
     // IȃZbgiėpꍇȂǁj
     void Reset();
 

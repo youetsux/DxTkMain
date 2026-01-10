@@ -2,7 +2,12 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <cstddef>
+
+// StepC COMPLETE:
+// Runtime transform evaluation is fully baked-data driven.
+// No ufbx_scene or import-side data is referenced from this module.
 
 using namespace DirectX;
 
@@ -231,6 +236,66 @@ namespace
         XMMATRIX t = XMMatrixTranslationFromVector(l.t);
         return s * r * t;
     }
+
+    static void BuildWorldFromLocal(const BakedRig& rig,
+        const std::vector<XMMATRIX>& local,
+        std::vector<XMMATRIX>& out_world)
+    {
+        const std::size_t n = rig.nodes.size();
+        out_world.resize(n);
+
+        enum : uint8_t
+        {
+            kUnvisited = 0,
+            kVisiting = 1,
+            kDone = 2,
+        };
+
+        std::vector<uint8_t> state(n, kUnvisited);
+        std::vector<uint8_t> in_cycle(n, 0);
+
+        auto eval_node = [&](auto&& self, std::size_t i) -> void
+            {
+                if (i >= n) return;
+                if (state[i] == kDone) return;
+                if (state[i] == kVisiting)
+                {
+                    // Cycle detected: fall back to local.
+                    out_world[i] = local[i];
+                    state[i] = kDone;
+                    in_cycle[i] = 1;
+                    return;
+                }
+
+                state[i] = kVisiting;
+
+                const uint32_t parent = rig.nodes[i].parent;
+                if (parent == 0xFFFFFFFFu || (std::size_t)parent >= n)
+                {
+                    out_world[i] = local[i];
+                }
+                else
+                {
+                    self(self, (std::size_t)parent);
+                    if (in_cycle[parent])
+                    {
+                        out_world[i] = local[i];
+                        in_cycle[i] = 1;
+                    }
+                    else
+                    {
+                        out_world[i] = local[i] * out_world[parent];
+                    }
+                }
+
+                state[i] = kDone;
+            };
+
+        for (std::size_t i = 0; i < n; ++i)
+        {
+            eval_node(eval_node, i);
+        }
+    }
 }
 
 
@@ -254,35 +319,93 @@ void BakedPoseEval::EvaluateNodeWorld(const BakedRig& rig,
     float time,
     std::vector<XMMATRIX>& out_node_world)
 {
-    const std::size_t n = rig.nodes.size();
-    out_node_world.resize(n);
-
     std::vector<XMMATRIX> local;
-    local.resize(n);
+    EvaluateNodeLocal(rig, clip, time, local);
 
-    for (std::size_t i = 0; i < n; ++i)
+    BuildWorldFromLocal(rig, local, out_node_world);
+}
+
+
+BakedPosePlayer::BakedPosePlayer()
+    : rig_(nullptr)
+    , clip_(nullptr)
+    , loop_(false)
+    , build_palette_on_evaluate_(false)
+{
+}
+
+void BakedPosePlayer::SetRig(const BakedRig* rig)
+{
+    rig_ = rig;
+}
+
+void BakedPosePlayer::SetClip(const BakedAnimClip* clip)
+{
+    clip_ = clip;
+}
+
+void BakedPosePlayer::SetLoop(bool loop)
+{
+    loop_ = loop;
+}
+
+void BakedPosePlayer::SetBuildPaletteOnEvaluate(bool enable)
+{
+    build_palette_on_evaluate_ = enable;
+}
+
+void BakedPosePlayer::Evaluate(float time)
+{
+    if (!rig_)
     {
-        LocalTRS l = EvalLocalTRS(rig, clip, (uint32_t)i, time);
-        local[i] = ComposeLocalMatrix(l);
+        local_.node_local.clear();
+        world_.node_world.clear();
+        palette_.matrices.clear();
+        return;
     }
 
-    for (std::size_t i = 0; i < n; ++i)
+    const float t = BakedPoseEval::NormalizeTime(clip_, time, loop_);
+    BakedPoseEval::EvaluateNodeLocal(*rig_, clip_, t, local_.node_local);
+
+    BuildWorldFromLocal(*rig_, local_.node_local, world_.node_world);
+
+    if (build_palette_on_evaluate_)
     {
-        uint32_t parent = rig.nodes[i].parent;
-        if (parent == 0xFFFFFFFFu)
-        {
-            out_node_world[i] = local[i];
-        }
-        else
-        {
-            if ((std::size_t)parent < n)
-            {
-                out_node_world[i] = local[i] * out_node_world[parent];
-            }
-            else
-            {
-                out_node_world[i] = local[i];
-            }
-        }
+        BuildSkinPalette();
     }
+}
+
+const BakedPoseLocal& BakedPosePlayer::GetLocalPose() const
+{
+    return local_;
+}
+
+const BakedPoseWorld& BakedPosePlayer::GetWorldPose() const
+{
+    return world_;
+}
+
+
+void BakedPoseEval::BuildSkinPaletteStub(const BakedPoseWorld& world,
+    BakedSkinPalette& out_palette)
+{
+    out_palette.matrices = world.node_world;
+}
+
+void BakedPosePlayer::BuildSkinPalette()
+{
+    BakedPoseEval::BuildSkinPaletteStub(world_, palette_);
+}
+
+const BakedSkinPalette& BakedPosePlayer::GetSkinPalette() const
+{
+    return palette_;
+}
+
+void BakedPosePlayer::EvaluateWithPalette(float time)
+{
+    const bool prev = build_palette_on_evaluate_;
+    build_palette_on_evaluate_ = true;
+    Evaluate(time);
+    build_palette_on_evaluate_ = prev;
 }
