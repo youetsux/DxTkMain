@@ -1,4 +1,4 @@
-﻿#include "TestScene.h"
+#include "TestScene.h"
 
 #include "Engine/GameObject.h"
 #include "ModelComponent.h"
@@ -54,7 +54,7 @@ void TestScene::Initialize()
     mc2->SetAnimRange(0, 39, 1.0f);
     mc2->SetLoop(true);
     // 初期位置 mc_
-    actor2_->GetTransform().position_ = { 1.0f, 0.0f, 0.0f };
+    actor2_->GetTransform().position_ = { 2.0f, 0.0f, 0.0f };
     //actor2_->GetTransform().rotate_ = { -90.0f, 0.0f, 0.0f };//blenderのモデルだけ90度寝てる
     actor2_->GetTransform().scale_ = { 1.0f, 1.0f, 1.0f };
 
@@ -78,7 +78,7 @@ void TestScene::Initialize()
 void TestScene::Update()
 {
     if (!actor_) return;
-
+   
     const float dt = (float)EngineTime::DeltaTime();
 
     // --- 入力で左右に動かす（追従が分かりやすいので一緒に） ---
@@ -106,21 +106,21 @@ void TestScene::Update()
     // 少し上を注視
     DirectX::XMFLOAT3 at{
         t.position_.x,
-        t.position_.y + 1,
+        t.position_.y+1,
         t.position_.z
     };
 
     //Camera::SetPosition({ eye.x, eye.y, eye.z });
     //Camera::SetTarget({at.x, at.y, at.z});
 
-    if (Input::IsKeyDown(VK_SPACE))
+    if(Input::IsKeyDown(VK_SPACE))
     {
         //int acount = mc_->GetAnimStackCount();
         //static int animNum = 0;
         //mc_->SetAnimStack((animNum++) % acount);
-
-    }
-    static bool isPlayBGM = false;
+        
+	}
+	static bool isPlayBGM = false;
     if (Input::IsKeyDown('B'))
     {
         Sound::PlayBGM("Assets/BGM1.wav");
@@ -128,12 +128,12 @@ void TestScene::Update()
 
     // Debug: run baked pose evaluator self tests.
     // Press 'T' to run.
-#if BAKED_POSE_EVAL_SELFTESTS
+    #if BAKED_POSE_EVAL_SELFTESTS
     if (Input::IsKeyDown('T'))
-    {
-        BakedPoseEvalTest::SelfTest_WorldOrderIndependent();
-        BakedPoseEvalTest::SelfTest_PartialChannelTRS();
-    }
+        {
+            BakedPoseEvalTest::SelfTest_WorldOrderIndependent();
+            BakedPoseEvalTest::SelfTest_PartialChannelTRS();
+        }
 #endif
 }
 

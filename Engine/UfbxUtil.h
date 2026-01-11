@@ -23,11 +23,11 @@ namespace UfbxUtil
    template<typename AttrT>
     uint32_t ValueIndexOf(const AttrT& attr, uint32_t corner, uint32_t vtx)
     {
-
+        // 別の indices 配列を持っている場合
         if (attr.indices.count > 0)  return attr.indices.data[corner];
-
+        // 頂点ごとに一意な場合
         if (attr.unique_per_vertex)  return vtx;
-
+        // それ以外は corner 番号をそのまま使う
         return corner;
     }
 

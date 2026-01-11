@@ -14,10 +14,10 @@ namespace
 {
     std::unique_ptr<DirectX::AudioEngine> g_audio;
 
-
+    // 効果音キャッシュ（ファイルパス→SoundEffect）
     std::unordered_map<std::string, std::unique_ptr<DirectX::SoundEffect>> g_seCache;
 
-
+    // BGM は1本だけ（最小）
     std::unique_ptr<DirectX::SoundEffect> g_bgmEffect;
     std::unique_ptr<DirectX::SoundEffectInstance> g_bgmInst;
     std::string g_bgmPath;
@@ -31,13 +31,13 @@ namespace
         return std::max(0.0f, std::min(1.0f, v));
     }
 
-
-
+    // 変更点(2025-12-13):
+    // - SoundEffect は wchar_t* を要求するため、std::string から std::wstring に変換する
     std::wstring ToWidePath(const std::string& s)
     {
         if (s.empty()) return std::wstring();
 
-
+        // まず UTF-8 として変換を試みる（ASCII もここで通る）
         int len = MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, nullptr, 0);
         if (len > 0)
         {
@@ -47,7 +47,7 @@ namespace
             return w;
         }
 
-
+        // 失敗したら ACP でも試す（古いShift-JIS環境など）
         len = MultiByteToWideChar(CP_ACP, 0, s.c_str(), -1, nullptr, 0);
         if (len > 0)
         {
@@ -71,7 +71,7 @@ namespace
         std::wstring wpath = ToWidePath(filePath);
         if (wpath.empty()) return nullptr;
 
-
+        // 最小構成：wav 想定
         auto se = std::make_unique<DirectX::SoundEffect>(g_audio.get(), wpath.c_str());
         auto* ptr = se.get();
         g_seCache.emplace(filePath, std::move(se));
@@ -100,7 +100,7 @@ namespace Sound
 
         if (!g_audio->Update())
         {
-
+            // 最小：デバイス喪失などを簡易復旧
             g_audio.reset();
 
             g_seCache.clear();
@@ -141,18 +141,18 @@ namespace Sound
 
         const float v = Clamp01(volume) * Clamp01(g_bgmVol);
 
-
+        // 同じBGMがすでに用意されているなら、音量を更新して再生状態を整える
         if (g_bgmInst && g_bgmPath == filePath)
         {
             g_bgmInst->SetVolume(v);
 
-
+            // loop の切替を確実に反映する最小手段：Stop→Play(loop)
             g_bgmInst->Stop(true);
             g_bgmInst->Play(loop);
             return;
         }
 
-
+        // 別BGMに切り替え
         StopBGM();
 
         std::wstring wpath = ToWidePath(filePath);

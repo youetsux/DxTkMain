@@ -13,17 +13,17 @@ struct BakedPoseEval
     static float NormalizeTime(const BakedAnimClip* clip, float time, bool loop);
 
     static void EvaluateNodeLocal(const BakedRig& rig,
-        const BakedAnimClip* clip,
-        float time,
-        std::vector<DirectX::XMMATRIX>& out_node_local);
+                                 const BakedAnimClip* clip,
+                                 float time,
+                                 std::vector<DirectX::XMMATRIX>& out_node_local);
 
     static void EvaluateNodeWorld(const BakedRig& rig,
-        const BakedAnimClip* clip,
-        float time,
-        std::vector<DirectX::XMMATRIX>& out_node_world);
+                                 const BakedAnimClip* clip,
+                                 float time,
+                                 std::vector<DirectX::XMMATRIX>& out_node_world);
 
     static void BuildSkinPaletteStub(const BakedPoseWorld& world,
-        BakedSkinPalette& out_palette);
+                                    BakedSkinPalette& out_palette);
 
 };
 

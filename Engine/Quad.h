@@ -17,12 +17,12 @@ public:
     Quad& operator=(const Quad&) = delete;
 
     HRESULT Initialize();
-    // š ’Ç‰ÁF‰Šú‰»‚ÉUV‚ğw’èi0..1j
+    // â˜… è¿½åŠ ï¼šåˆæœŸåŒ–æ™‚ã«UVã‚’æŒ‡å®šï¼ˆ0..1ï¼‰
     HRESULT Initialize(float u0, float v0, float u1, float v1);
 
     void Draw(const DirectX::XMMATRIX& wvp);
 
-    // ŒİŠ·«‚Ì‚½‚ß‚Éc‚·‚ªA“à•”Š—L‚ÉØ‘ÖŒã‚Í–³‹‚µ‚ÄOK
+    // äº’æ›æ€§ã®ãŸã‚ã«æ®‹ã™ãŒã€å†…éƒ¨æ‰€æœ‰ã«åˆ‡æ›¿å¾Œã¯ç„¡è¦–ã—ã¦OK
     //void SetCommonStates(DirectX::CommonStates* /*states*/) {}
     HRESULT LoadTexture(const std::string& path);
 private:
@@ -31,7 +31,7 @@ private:
     Microsoft::WRL::ComPtr<ID3D11InputLayout>  m_inputLayout;
     std::shared_ptr<DirectX::IEffect>      m_effect;
 
-    // š Quad ‚ª©‘O‚ÅŠ—L
+    // â˜… Quad ãŒè‡ªå‰ã§æ‰€æœ‰
     std::unique_ptr<DirectX::CommonStates>     m_states;
 
     Texture m_texture;

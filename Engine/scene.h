@@ -2,9 +2,9 @@
 #include "RootObject.h"
 
 //-----------------------------------------------------------
-
-
-
+// Scene : Transform を持たない「世界の管理者」
+// - GameObject ツリーは RootObject 配下にぶら下げる
+// - Scene 自体は GameObject ではない（Transform不要）
 //-----------------------------------------------------------
 class Scene
 {

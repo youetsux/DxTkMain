@@ -22,7 +22,7 @@ HRESULT Quad::Initialize(float u0, float v0, float u1, float v1)
     auto* device = Gfx::Dev();
     if (!device) return E_POINTER;
 
-    // IBiŒÅ’èj
+    // IBï¼ˆå›ºå®šï¼‰
     const uint16_t idx[6] = { 0,1,2, 0,2,3 };
     D3D11_BUFFER_DESC ibd{};
     ibd.Usage = D3D11_USAGE_DEFAULT;
@@ -32,7 +32,7 @@ HRESULT Quad::Initialize(float u0, float v0, float u1, float v1)
     HRESULT hr = device->CreateBuffer(&ibd, &idata, m_ib.GetAddressOf());
     if (FAILED(hr)) return hr;
 
-    // VBiUV‚Íˆø”‚ÅŒˆ’èj
+    // VBï¼ˆUVã¯å¼•æ•°ã§æ±ºå®šï¼‰
     hr = BuildVB(u0, v0, u1, v1);
     if (FAILED(hr)) return hr;
 
@@ -77,8 +77,8 @@ void Quad::Draw(const XMMATRIX& wvp)
     ctx->IASetInputLayout(m_inputLayout.Get());
     ctx->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-    // Effect İ’èiW=I, V=I, P=WVPj
-    // dynamic_pointer_cast ‚ğg‚¤iˆÀ‘SE„§j
+    // Effect è¨­å®šï¼ˆW=I, V=I, P=WVPï¼‰
+    // dynamic_pointer_cast ã‚’ä½¿ã†ï¼ˆå®‰å…¨ãƒ»æ¨å¥¨ï¼‰
     std::shared_ptr<DirectX::BasicEffect> be = std::dynamic_pointer_cast<DirectX::BasicEffect>(m_effect);
 
     be->SetWorld(XMMatrixIdentity());
@@ -89,7 +89,7 @@ void Quad::Draw(const XMMATRIX& wvp)
 
 
 
-    // š Quad “à‚Ì CommonStates ‚ğg—pi”¼“§–¾PNG‘z’èj
+    // â˜… Quad å†…ã® CommonStates ã‚’ä½¿ç”¨ï¼ˆåŠé€æ˜PNGæƒ³å®šï¼‰
     //Gfx::SetAlphaNonPremul(ctx, m_states.get());
     Gfx::SetAlphaNonPremulWriteZ(ctx, m_states.get());
     ID3D11SamplerState* samp = m_states->LinearWrap();
@@ -102,23 +102,23 @@ void Quad::Draw(const XMMATRIX& wvp)
     // Draw
     ctx->DrawIndexed(6, 0, 0);
 
-    //// Œã•Ğ•t‚¯i”CˆÓj
+    //// å¾Œç‰‡ä»˜ã‘ï¼ˆä»»æ„ï¼‰
     //ID3D11ShaderResourceView* nullSRV = nullptr;
     //ctx->PSSetShaderResources(0, 1, &nullSRV);
     Gfx::SetOpaque(ctx, m_states.get());
 }
 
-// UVw’è”Å VB ì¬
+// UVæŒ‡å®šç‰ˆ VB ä½œæˆ
 HRESULT Quad::BuildVB(float u0, float v0, float u1, float v1)
 {
     auto* device = Gfx::Dev();
     if (!device) return E_POINTER;
 
     VertexPositionTexture v[4] = {
-        { Vector3(-0.5f,  0.5f, 0.f), Vector2(u0, v0) }, // ¶ã
-        { Vector3(0.5f,  0.5f, 0.f), Vector2(u1, v0) }, // ‰Eã
-        { Vector3(0.5f, -0.5f, 0.f), Vector2(u1, v1) }, // ‰E‰º
-        { Vector3(-0.5f, -0.5f, 0.f), Vector2(u0, v1) }, // ¶‰º
+        { Vector3(-0.5f,  0.5f, 0.f), Vector2(u0, v0) }, // å·¦ä¸Š
+        { Vector3(0.5f,  0.5f, 0.f), Vector2(u1, v0) }, // å³ä¸Š
+        { Vector3(0.5f, -0.5f, 0.f), Vector2(u1, v1) }, // å³ä¸‹
+        { Vector3(-0.5f, -0.5f, 0.f), Vector2(u0, v1) }, // å·¦ä¸‹
     };
 
     m_vb.Reset();
@@ -132,5 +132,5 @@ HRESULT Quad::BuildVB(float u0, float v0, float u1, float v1)
 
 HRESULT Quad::LoadTexture(const std::string& path)
 {
-    return m_texture.Load(path); // DXTK WIC ƒ[ƒ_iTexture.cpp‚ÅÀ‘•Ï‚İj
+    return m_texture.Load(path); // DXTK WIC ãƒ­ãƒ¼ãƒ€ï¼ˆTexture.cppã§å®Ÿè£…æ¸ˆã¿ï¼‰
 }

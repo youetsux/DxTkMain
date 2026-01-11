@@ -28,7 +28,7 @@ void FbxMeshGroup::RecalcBounds()
 {
     bounds_.Reset();
 
-
+    // 全 bind_vertices を舐めて AABB を作り直す（BVolume の min/max 名に依存しない）
     for (const auto& m : meshes_) {
         if (!m) continue;
 

@@ -6,7 +6,7 @@ using namespace DirectX;
 class Transform
 {
 public:
-
+    // 既存メンバはすべてそのまま維持
     XMMATRIX matTranslate_;
     XMMATRIX matRotate_;
     XMMATRIX matScale_;
@@ -17,7 +17,7 @@ public:
     bool isSetDirect;
 
 private:
-
+    // ★ 追加：内部キャッシュと dirty フラグ
     mutable bool dirty_;
     mutable XMMATRIX cachedWorld_;
 
@@ -25,9 +25,9 @@ public:
     Transform();
     ~Transform();
 
-    void Calculation();
-    void CalculationInternal() const;
-    XMMATRIX GetWorldMatrix() const;
+    void Calculation();                 // 設計は維持（非 const のまま）
+    void CalculationInternal() const;   // ★ const 版内部計算を追加
+    XMMATRIX GetWorldMatrix() const;   // ★ const 対応
 
     static XMFLOAT3 Float3Add(XMFLOAT3 a, XMFLOAT3 b)
     {

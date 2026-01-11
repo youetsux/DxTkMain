@@ -40,23 +40,23 @@ namespace BakedDataValidate
         }
 
         for (uint32_t i = 0; i < node_count; ++i)
-        {
-            const uint32_t element_id = rig.nodes[i].element_id;
-            if (element_id >= static_cast<uint32_t>(rig.element_id_to_node.size()))
-            {
-                SetErrorIndex(out_error, "rig: node element_id out of range", i);
-                return false;
-            }
+{
+    const uint32_t element_id = rig.nodes[i].element_id;
+    if (element_id >= static_cast<uint32_t>(rig.element_id_to_node.size()))
+    {
+        SetErrorIndex(out_error, "rig: node element_id out of range", i);
+        return false;
+    }
 
-            const uint32_t mapped_index = rig.element_id_to_node[element_id];
-            if (mapped_index != i)
-            {
-                SetErrorIndex(out_error, "rig: element_id_to_node mismatch", i);
-                return false;
-            }
-        }
+    const uint32_t mapped_index = rig.element_id_to_node[element_id];
+    if (mapped_index != i)
+    {
+        SetErrorIndex(out_error, "rig: element_id_to_node mismatch", i);
+        return false;
+    }
+}
 
-        for (uint32_t element_id = 0; element_id < static_cast<uint32_t>(rig.element_id_to_node.size()); ++element_id)
+for (uint32_t element_id = 0; element_id < static_cast<uint32_t>(rig.element_id_to_node.size()); ++element_id)
         {
             const uint32_t node_index = rig.element_id_to_node[element_id];
             if (node_index != 0xFFFFFFFFu && node_index >= node_count)
@@ -97,9 +97,9 @@ namespace BakedDataValidate
 
         const uint32_t node_count = static_cast<uint32_t>(rig.nodes.size());
         std::vector<uint8_t> seen_node_channel;
-        seen_node_channel.resize(node_count, 0u);
+seen_node_channel.resize(node_count, 0u);
 
-        for (uint32_t ci = 0; ci < static_cast<uint32_t>(clip->channels.size()); ++ci)
+for (uint32_t ci = 0; ci < static_cast<uint32_t>(clip->channels.size()); ++ci)
         {
             const BakedAnimChannel& ch = clip->channels[ci];
             if (ch.node_index == 0xFFFFFFFFu)
@@ -112,12 +112,12 @@ namespace BakedDataValidate
                 SetErrorIndex(out_error, "clip: channel node_index out of range", ci);
                 return false;
             }
-            if (seen_node_channel[ch.node_index] != 0u)
-            {
-                SetErrorIndex(out_error, "clip: duplicate channel node_index", ci);
-                return false;
-            }
-            seen_node_channel[ch.node_index] = 1u;
+if (seen_node_channel[ch.node_index] != 0u)
+{
+    SetErrorIndex(out_error, "clip: duplicate channel node_index", ci);
+    return false;
+}
+seen_node_channel[ch.node_index] = 1u;
 
         }
 

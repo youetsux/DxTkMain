@@ -33,18 +33,18 @@ namespace BakedPoseEvalTest
             XMFLOAT4X4 m;
             XMStoreFloat4x4(&m, node_world[i]);
             wsprintfA(buf,
-                "node[%u] m00=%f m11=%f m22=%f m30=%f m31=%f m32=%f\n",
-                (unsigned)i,
-                m._11, m._22, m._33,
-                m._41, m._42, m._43);
+                      "node[%u] m00=%f m11=%f m22=%f m30=%f m31=%f m32=%f\n",
+                      (unsigned)i,
+                      m._11, m._22, m._33,
+                      m._41, m._42, m._43);
             OutputDebugStringA(buf);
         }
-
+    
 #if BAKED_POSE_EVAL_SELFTESTS
         SelfTest_WorldOrderIndependent();
         SelfTest_PartialChannelTRS();
 #endif
-    }
+}
 
     void SelfTest_WorldOrderIndependent()
     {
@@ -89,9 +89,9 @@ namespace BakedPoseEvalTest
         {
             char buf[256];
             wsprintfA(buf,
-                "SelfTest_WorldOrderIndependent FAILED: node1_x=%f node0_x=%f\n",
-                node1_x,
-                node0_x);
+                      "SelfTest_WorldOrderIndependent FAILED: node1_x=%f node0_x=%f\n",
+                      node1_x,
+                      node0_x);
             OutputDebugStringA(buf);
         }
         else
@@ -177,10 +177,10 @@ namespace BakedPoseEvalTest
         {
             char buf[256];
             wsprintfA(buf,
-                "SelfTest_PartialChannelTRS FAILED: ok_t=%d ok_r=%d ok_s=%d\n",
-                ok_t ? 1 : 0,
-                ok_r ? 1 : 0,
-                ok_s ? 1 : 0);
+                      "SelfTest_PartialChannelTRS FAILED: ok_t=%d ok_r=%d ok_s=%d\n",
+                      ok_t ? 1 : 0,
+                      ok_r ? 1 : 0,
+                      ok_s ? 1 : 0);
             OutputDebugStringA(buf);
         }
         else

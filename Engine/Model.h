@@ -9,7 +9,6 @@ namespace Model
 {
     void Initialize();
     int  Load(std::string fileName);
-    int  LoadBaked(std::string fileName);
     int  Load(const std::string& fileName, float targetHeight);
 
     void Draw(int handle);
@@ -17,11 +16,11 @@ namespace Model
     void Release(int handle);
     void AllRelease();
 
-
+    // 既存：フレーム指定再生
     void SetAnimFrame(int handle, int startFrame, int endFrame, float animSpeed);
 
-
-
+    // 追加：現在選択中のアニメ（AnimStack/Default）をフル再生
+    // ※フレーム指定再生は維持したまま、FBXの time_begin/time_end をフレームに変換して range を組む
     void SetAnimation(int handle, float animSpeed);
 
     int  GetAnimFrame(int handle);
@@ -50,6 +49,6 @@ namespace Model
     void  SetRootRotationQuaternion(int handle, const DirectX::XMFLOAT4& q);
     DirectX::XMFLOAT4 GetRootRotationQuaternion(int handle);
 
-
+    // degree（度）指定
     void SetRootRotationYawPitchRollDeg(int handle, float yawDeg, float pitchDeg, float rollDeg);
 }

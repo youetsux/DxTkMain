@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include <string>
 #include <DirectXMath.h>
 #include "Engine\Component.h"
@@ -8,18 +8,14 @@ class GameObject;
 
 //-----------------------------------------------------------
 // ModelComponent
-
-
+// - targetHeight による自動スケールは維持
+// - 手動「RootScale」「RootRotation」も指定可能（明示指定時のみ上書き）
 //-----------------------------------------------------------
 class ModelComponent : public Component
 {
 public:
     ModelComponent(GameObject* owner,
         const std::string& modelPath,
-        float targetHeight = 0.0f);
-    ModelComponent(GameObject* owner,
-        const std::string& modelPath,
-        bool useBaked,
         float targetHeight = 0.0f);
     ~ModelComponent() override;
 
@@ -32,22 +28,22 @@ public:
     bool IsLoaded() const { return modelHandle_ >= 0; }
     float TargetHeight() const { return targetHeight_; }
 
-
+    // --- 手動ルートスケール ---
     void  SetRootScale(float rootScale);
     float GetRootScale() const;
     bool  HasRootScaleOverride() const { return hasRootScaleOverride_; }
 
-
-
+    // --- 手動ルートローテーション ---
+    // 単位はラジアン
     void SetRootRotationYawPitchRoll(float yaw, float pitch, float roll);
     void SetRootRotationQuaternion(const DirectX::XMFLOAT4& q);
     DirectX::XMFLOAT4 GetRootRotationQuaternion() const;
     bool HasRootRotationOverride() const { return hasRootRotationOverride_; }
 
-
+    // degree（度）指定
     void SetRootRotationYawPitchRollDeg(float yawDeg, float pitchDeg, float rollDeg);
 
-
+    // --- アニメ：最小API ---
     void SetAnimRange(int startFrame, int endFrame, float animSpeed);
     void Play(int startFrame, int endFrame, float animSpeed, bool loop);
 
@@ -64,14 +60,13 @@ public:
     void SetAnimStack(int index);
     void SetAnimStack(const std::string& stackName);
 
-
+    // 追加：現在選択中のアニメをフル再生（フレーム指定APIは残す）
     void SetAnimation(float animSpeed, bool loop);
 
 private:
     std::string modelPath_;
     float targetHeight_;
     int modelHandle_;
-    bool useBaked_;
 
     bool  hasRootScaleOverride_;
     float rootScale_;

@@ -238,8 +238,8 @@ namespace
     }
 
     static void BuildWorldFromLocal(const BakedRig& rig,
-        const std::vector<XMMATRIX>& local,
-        std::vector<XMMATRIX>& out_world)
+                                   const std::vector<XMMATRIX>& local,
+                                   std::vector<XMMATRIX>& out_world)
     {
         const std::size_t n = rig.nodes.size();
         out_world.resize(n);
@@ -255,41 +255,41 @@ namespace
         std::vector<uint8_t> in_cycle(n, 0);
 
         auto eval_node = [&](auto&& self, std::size_t i) -> void
+        {
+            if (i >= n) return;
+            if (state[i] == kDone) return;
+            if (state[i] == kVisiting)
             {
-                if (i >= n) return;
-                if (state[i] == kDone) return;
-                if (state[i] == kVisiting)
+                // Cycle detected: fall back to local.
+                out_world[i] = local[i];
+                state[i] = kDone;
+                in_cycle[i] = 1;
+                return;
+            }
+
+            state[i] = kVisiting;
+
+            const uint32_t parent = rig.nodes[i].parent;
+            if (parent == 0xFFFFFFFFu || (std::size_t)parent >= n)
+            {
+                out_world[i] = local[i];
+            }
+            else
+            {
+                self(self, (std::size_t)parent);
+                if (in_cycle[parent])
                 {
-                    // Cycle detected: fall back to local.
                     out_world[i] = local[i];
-                    state[i] = kDone;
                     in_cycle[i] = 1;
-                    return;
-                }
-
-                state[i] = kVisiting;
-
-                const uint32_t parent = rig.nodes[i].parent;
-                if (parent == 0xFFFFFFFFu || (std::size_t)parent >= n)
-                {
-                    out_world[i] = local[i];
                 }
                 else
                 {
-                    self(self, (std::size_t)parent);
-                    if (in_cycle[parent])
-                    {
-                        out_world[i] = local[i];
-                        in_cycle[i] = 1;
-                    }
-                    else
-                    {
-                        out_world[i] = local[i] * out_world[parent];
-                    }
+                    out_world[i] = local[i] * out_world[parent];
                 }
+            }
 
-                state[i] = kDone;
-            };
+            state[i] = kDone;
+        };
 
         for (std::size_t i = 0; i < n; ++i)
         {
@@ -300,9 +300,9 @@ namespace
 
 
 void BakedPoseEval::EvaluateNodeLocal(const BakedRig& rig,
-    const BakedAnimClip* clip,
-    float time,
-    std::vector<XMMATRIX>& out_node_local)
+                                     const BakedAnimClip* clip,
+                                     float time,
+                                     std::vector<XMMATRIX>& out_node_local)
 {
     const std::size_t n = rig.nodes.size();
     out_node_local.resize(n);
@@ -315,9 +315,9 @@ void BakedPoseEval::EvaluateNodeLocal(const BakedRig& rig,
 }
 
 void BakedPoseEval::EvaluateNodeWorld(const BakedRig& rig,
-    const BakedAnimClip* clip,
-    float time,
-    std::vector<XMMATRIX>& out_node_world)
+                                     const BakedAnimClip* clip,
+                                     float time,
+                                     std::vector<XMMATRIX>& out_node_world)
 {
     std::vector<XMMATRIX> local;
     EvaluateNodeLocal(rig, clip, time, local);
@@ -387,7 +387,7 @@ const BakedPoseWorld& BakedPosePlayer::GetWorldPose() const
 
 
 void BakedPoseEval::BuildSkinPaletteStub(const BakedPoseWorld& world,
-    BakedSkinPalette& out_palette)
+                                  BakedSkinPalette& out_palette)
 {
     out_palette.matrices = world.node_world;
 }

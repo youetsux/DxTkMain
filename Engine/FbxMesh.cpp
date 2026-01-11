@@ -1,4 +1,4 @@
-﻿#define WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <Windows.h>
 
@@ -30,71 +30,71 @@ using Microsoft::WRL::ComPtr;
 // ------------------------------------------------------------
 static Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> CreateCheckerboardSRV(ID3D11Device* device)
 {
-	Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> srv;
-	if (!device) return srv;
+    Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> srv;
+    if (!device) return srv;
 
-	const UINT w = 64;
-	const UINT h = 64;
-	const UINT check = 8; // squares per side
-	std::vector<uint32_t> pixels;
-	pixels.resize(size_t(w) * size_t(h));
+    const UINT w = 64;
+    const UINT h = 64;
+    const UINT check = 8; // squares per side
+    std::vector<uint32_t> pixels;
+    pixels.resize(size_t(w) * size_t(h));
 
-	for (UINT y = 0; y < h; ++y) {
-		for (UINT x = 0; x < w; ++x) {
-			const UINT cx = (x * check) / w;
-			const UINT cy = (y * check) / h;
-			const bool odd = ((cx ^ cy) & 1) != 0;
-			const uint8_t v = odd ? 0xFF : 0x20;
-			pixels[size_t(y) * size_t(w) + size_t(x)] =
-				0xFF000000u | (uint32_t(v) << 16) | (uint32_t(v) << 8) | uint32_t(v);
-		}
-	}
+    for (UINT y = 0; y < h; ++y) {
+        for (UINT x = 0; x < w; ++x) {
+            const UINT cx = (x * check) / w;
+            const UINT cy = (y * check) / h;
+            const bool odd = ((cx ^ cy) & 1) != 0;
+            const uint8_t v = odd ? 0xFF : 0x20;
+            pixels[size_t(y) * size_t(w) + size_t(x)] =
+                0xFF000000u | (uint32_t(v) << 16) | (uint32_t(v) << 8) | uint32_t(v);
+        }
+    }
 
-	D3D11_TEXTURE2D_DESC td = {};
-	td.Width = w;
-	td.Height = h;
-	td.MipLevels = 1;
-	td.ArraySize = 1;
-	td.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-	td.SampleDesc.Count = 1;
-	td.Usage = D3D11_USAGE_IMMUTABLE;
-	td.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+    D3D11_TEXTURE2D_DESC td = {};
+    td.Width = w;
+    td.Height = h;
+    td.MipLevels = 1;
+    td.ArraySize = 1;
+    td.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    td.SampleDesc.Count = 1;
+    td.Usage = D3D11_USAGE_IMMUTABLE;
+    td.BindFlags = D3D11_BIND_SHADER_RESOURCE;
 
-	D3D11_SUBRESOURCE_DATA init = {};
-	init.pSysMem = pixels.data();
-	init.SysMemPitch = w * sizeof(uint32_t);
+    D3D11_SUBRESOURCE_DATA init = {};
+    init.pSysMem = pixels.data();
+    init.SysMemPitch = w * sizeof(uint32_t);
 
-	Microsoft::WRL::ComPtr<ID3D11Texture2D> tex;
-	if (FAILED(device->CreateTexture2D(&td, &init, tex.GetAddressOf()))) {
-		return srv;
-	}
+    Microsoft::WRL::ComPtr<ID3D11Texture2D> tex;
+    if (FAILED(device->CreateTexture2D(&td, &init, tex.GetAddressOf()))) {
+        return srv;
+    }
 
-	D3D11_SHADER_RESOURCE_VIEW_DESC sd = {};
-	sd.Format = td.Format;
-	sd.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
-	sd.Texture2D.MipLevels = 1;
+    D3D11_SHADER_RESOURCE_VIEW_DESC sd = {};
+    sd.Format = td.Format;
+    sd.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+    sd.Texture2D.MipLevels = 1;
 
-	device->CreateShaderResourceView(tex.Get(), &sd, srv.GetAddressOf());
-	return srv;
+    device->CreateShaderResourceView(tex.Get(), &sd, srv.GetAddressOf());
+    return srv;
 }
 
 // Cache per-process (device pointer check)
 static Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> GetCheckerboardSRV(ID3D11Device* device)
 {
-	static ID3D11Device* s_device = nullptr;
-	static Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> s_srv;
+    static ID3D11Device* s_device = nullptr;
+    static Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> s_srv;
 
-	if (!device) {
-		s_device = nullptr;
-		s_srv.Reset();
-		return s_srv;
-	}
+    if (!device) {
+        s_device = nullptr;
+        s_srv.Reset();
+        return s_srv;
+    }
 
-	if (s_device != device || !s_srv) {
-		s_device = device;
-		s_srv = CreateCheckerboardSRV(device);
-	}
-	return s_srv;
+    if (s_device != device || !s_srv) {
+        s_device = device;
+        s_srv = CreateCheckerboardSRV(device);
+    }
+    return s_srv;
 }
 
 namespace FbxMeshBuild
@@ -684,7 +684,7 @@ bool FbxMesh::BuildFromScene(const ufbx_scene* scene,
 	FbxSkeleton& skeleton,
 	const char* fbx_path)
 {
-
+	
 	force_checker_texture_ = false;
 	if (!scene) return false;
 
@@ -714,7 +714,7 @@ bool FbxMesh::BuildFromNode(const ufbx_scene* scene,
 	FbxSkeleton& skeleton,
 	const char* fbx_path)
 {
-
+	
 	force_checker_texture_ = false;
 	if (!scene || !node || !node->mesh) return false;
 
@@ -748,7 +748,7 @@ bool FbxMesh::BuildFromNode(const ufbx_scene* scene,
 
 bool FbxMesh::BuildFromBaked(const BakedMeshImportResult& src, const ufbx_scene* scene, const char* fbx_path)
 {
-
+	
 	force_checker_texture_ = true;
 	// 入力検証
 	if (!src.IsValid()) return false;
@@ -803,12 +803,12 @@ bool FbxMesh::BuildFromBaked(const BakedMeshImportResult& src, const ufbx_scene*
 		{
 			MeshPart p;
 			p.mat = nullptr;
-			if (scene) {
-				uint32_t mi = s.material_index;
-				if (mi < scene->materials.count) {
-					p.mat = scene->materials.data[mi];
-				}
-			}
+            if (scene) {
+                uint32_t mi = s.material_index;
+                if (mi < scene->materials.count) {
+                    p.mat = scene->materials.data[mi];
+                }
+            }
 			p.start_index = s.index_start;
 			p.index_count = s.index_count;
 			p.srv.Reset();
@@ -1390,8 +1390,7 @@ void FbxMesh::UpdateSkinningIfNeeded(
 				if (sk == 0xFFFF) {
 					inf.weight[k] = 0.0f;
 					inf.bone[k] = 0;
-				}
-				else {
+				} else {
 					inf.bone[k] = sk;
 					sum += inf.weight[k];
 				}

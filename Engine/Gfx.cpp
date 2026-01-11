@@ -5,7 +5,7 @@
 #include "Gfx.h"
 
 namespace {
-    DX::DeviceResources* g_dr = nullptr;
+    DX::DeviceResources* g_dr = nullptr; // ★ 非所有の生ポインタ
 }
 
 void Gfx::Init(DX::DeviceResources* dr)
@@ -70,3 +70,4 @@ void Gfx::WindowSizeChanged(unsigned w, unsigned h)
     g_dr->WindowSizeChanged(w, h);
 }
 
+//結論　生ポインタは気持ちいい
