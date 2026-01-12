@@ -1,5 +1,6 @@
 ﻿#pragma once
 #include <vector>
+#include <memory>
 #include <DirectXMath.h>
 #include <unordered_map>
 
@@ -7,6 +8,8 @@ struct ufbx_scene;
 struct ufbx_node;
 struct ufbx_material;
 struct ufbx_anim;
+struct ufbx_baked_anim;
+struct ufbx_baked_node;
 
 // ------------------------------------------------------------
 // ボーン1本分の情報
@@ -79,4 +82,9 @@ public:
 
 private:
     SkeletonData data_;
+
+    // Bake cache: ufbx_bake_anim() の結果を保持して毎フレーム評価を不要にする
+    std::unique_ptr<ufbx_baked_anim, void(*)(ufbx_baked_anim*)> baked_{ nullptr, nullptr };
+    const ufbx_anim* baked_src_anim_ = nullptr;
+    std::unordered_map<uint32_t, const ufbx_baked_node*> baked_node_by_typed_id_;
 };

@@ -180,11 +180,6 @@ void FbxSkeleton::UpdateAtTime(const ufbx_scene* scene, const ufbx_anim* anim, d
     if (!scene || !anim) return;
     if (data_.bones_.empty()) return;
 
-#if defined(_DEBUG)
-    using clock = std::chrono::high_resolution_clock;
-    const auto t0 = clock::now();
-#endif
-
     // t をアニメーション時間の範囲にクランプ
     double t = t_sec;
     if (anim->time_end > anim->time_begin)
@@ -193,197 +188,167 @@ void FbxSkeleton::UpdateAtTime(const ufbx_scene* scene, const ufbx_anim* anim, d
         if (t > anim->time_end)   t = anim->time_end;
     }
 
-#if defined(_DEBUG)
-    const auto t1 = clock::now();
-#endif
+    // ------------------------------------------------------------
+    // 単純ベイク再生（完全版）
+    // ・毎フレーム ufbx_evaluate_scene() はしない
+    // ・ufbx_evaluate_transform() も使わない
+    // ・ufbx_bake_anim() で作った baked のキー列から TRS を補間して行列を作る
+    // ・キーが無い成分は node->local_transform（レスト姿勢）を使う
+    // ------------------------------------------------------------
 
-    // 計算済みノードの結果を溜めるキャッシュ（フォールバック用）
-    auto& cache = data_.node_world_cache_;
-    cache.clear();
-    if (cache.bucket_count() < data_.bones_.size() * 2)
+    struct BakeCache
     {
-        cache.reserve(data_.bones_.size() * 2); // rehash 回避（挙動不変）
+        const ufbx_anim* anim = nullptr;
+        ufbx_baked_anim* baked = nullptr;
+        std::unordered_map<uint32_t, const ufbx_baked_node*> node_by_typed_id;
+    };
+
+    static std::unordered_map<const FbxSkeleton*, BakeCache> s_cache;
+
+    BakeCache& cache = s_cache[this];
+
+    if (!cache.baked || cache.anim != anim)
+    {
+        if (cache.baked)
+        {
+            ufbx_free_baked_anim(cache.baked);
+            cache.baked = nullptr;
+        }
+
+        cache.anim = anim;
+        cache.node_by_typed_id.clear();
+
+        ufbx_error error = {};
+        cache.baked = ufbx_bake_anim(scene, anim, nullptr, &error);
+        if (!cache.baked)
+        {
+            // ベイクに失敗した場合：今回は「単純ベイク」方針のため、何も更新せずに戻る
+            return;
+        }
+
+        cache.node_by_typed_id.reserve(cache.baked->nodes.count * 2);
+        for (size_t i = 0; i < cache.baked->nodes.count; ++i)
+        {
+            const ufbx_baked_node* bn = &cache.baked->nodes.data[i];
+            cache.node_by_typed_id[bn->typed_id] = bn;
+        }
     }
-
-    // ufbx 側でシーン全体を評価（ノードの node_to_world を更新したシーンを得る）
-    // 失敗時は従来の EvaluateNodeWorldRecursive() にフォールバックする
-    ufbx_error error = {};
-    ufbx_scene* eval_scene = ufbx_evaluate_scene(scene, anim, t, nullptr, &error);
-
-#if defined(_DEBUG)
-    const auto t2 = clock::now();
-#endif
 
     const size_t bone_count = data_.bones_.size();
-
-    // まず容量だけ確保して、再確保スパイクを抑える（挙動不変）
-    if (data_.curr_world_.capacity() < bone_count)
-    {
-        data_.curr_world_.reserve(bone_count);
-    }
-
-    // size を揃える（必要なときだけ）
     if (data_.curr_world_.size() != bone_count)
     {
         data_.curr_world_.resize(bone_count);
     }
 
-#if defined(_DEBUG)
-    const auto t3 = clock::now();
-    double max_bone_ms = 0.0;
-    size_t max_bone_i = 0;
-#endif
-
-    if (eval_scene)
-    {
-        // eval_scene のノード配列は typed_id で参照できる
-        // node_to_world をそのままコピーする（親継承/インヘリット等は ufbx が反映済み）
-        for (size_t i = 0; i < bone_count; ++i)
+    auto eval_vec3 = [](const ufbx_baked_vec3_list& keys, double time, ufbx_vec3 fallback) -> ufbx_vec3
         {
-            const ufbx_node* node = data_.bones_[i].node;
-            if (!node) continue;
+            if (keys.count == 0) return fallback;
+            if (keys.count == 1) return keys.data[0].value;
 
-            const uint32_t node_index = node->typed_id;
-            if (node_index >= eval_scene->nodes.count) continue;
+            if (time <= keys.data[0].time) return keys.data[0].value;
+            if (time >= keys.data[keys.count - 1].time) return keys.data[keys.count - 1].value;
 
-            const ufbx_node* eval_node = eval_scene->nodes.data[node_index];
-            if (!eval_node) continue;
-
-#if defined(_DEBUG)
-            const auto tb0 = clock::now();
-#endif
-
-            data_.curr_world_[i] = UfbxUtil::ToXMMatrix(eval_node->node_to_world);
-
-#if defined(_DEBUG)
-            const auto tb1 = clock::now();
-            const double bone_ms = std::chrono::duration<double, std::milli>(tb1 - tb0).count();
-            if (bone_ms > max_bone_ms)
+            size_t lo = 0;
+            size_t hi = keys.count - 1;
+            while (hi - lo > 1)
             {
-                max_bone_ms = bone_ms;
-                max_bone_i = i;
+                size_t mid = (lo + hi) / 2;
+                if (time < keys.data[mid].time) hi = mid;
+                else lo = mid;
             }
-#endif
+
+            const ufbx_baked_vec3& a = keys.data[lo];
+            const ufbx_baked_vec3& b = keys.data[hi];
+            const double dt = b.time - a.time;
+            const double k = dt > 0.0 ? (time - a.time) / dt : 0.0;
+
+            ufbx_vec3 out;
+            out.x = a.value.x + (b.value.x - a.value.x) * k;
+            out.y = a.value.y + (b.value.y - a.value.y) * k;
+            out.z = a.value.z + (b.value.z - a.value.z) * k;
+            return out;
+        };
+
+    auto eval_quat = [](const ufbx_baked_quat_list& keys, double time, ufbx_quat fallback) -> ufbx_quat
+        {
+            if (keys.count == 0) return fallback;
+            if (keys.count == 1) return keys.data[0].value;
+
+            if (time <= keys.data[0].time) return keys.data[0].value;
+            if (time >= keys.data[keys.count - 1].time) return keys.data[keys.count - 1].value;
+
+            size_t lo = 0;
+            size_t hi = keys.count - 1;
+            while (hi - lo > 1)
+            {
+                size_t mid = (lo + hi) / 2;
+                if (time < keys.data[mid].time) hi = mid;
+                else lo = mid;
+            }
+
+            const ufbx_baked_quat& a = keys.data[lo];
+            const ufbx_baked_quat& b = keys.data[hi];
+
+            const double dt = b.time - a.time;
+            const float k = (float)(dt > 0.0 ? (time - a.time) / dt : 0.0);
+
+            using namespace DirectX;
+            XMVECTOR qa = XMVectorSet((float)a.value.x, (float)a.value.y, (float)a.value.z, (float)a.value.w);
+            XMVECTOR qb = XMVectorSet((float)b.value.x, (float)b.value.y, (float)b.value.z, (float)b.value.w);
+
+            XMVECTOR q = XMQuaternionSlerp(qa, qb, k);
+            q = XMQuaternionNormalize(q);
+
+            XMFLOAT4 fq;
+            XMStoreFloat4(&fq, q);
+
+            ufbx_quat out;
+            out.x = fq.x; out.y = fq.y; out.z = fq.z; out.w = fq.w;
+            return out;
+        };
+
+    // ワールド合成：Parent * Local（あなたの実装規約に合わせる）
+    for (size_t i = 0; i < bone_count; ++i)
+    {
+        const BoneInfo& bone = data_.bones_[i];
+        if (!bone.node)
+        {
+            DirectX::XMStoreFloat4x4(&data_.curr_world_[i], DirectX::XMMatrixIdentity());
+            continue;
         }
 
-        ufbx_free_scene(eval_scene);
-        eval_scene = nullptr;
-    }
-    else
-    {
-        // ルート(親なし)を先に評価してキャッシュを温める
-        for (size_t i = 0; i < bone_count; ++i)
+        // レスト姿勢（デフォルト値）
+        ufbx_transform xf = bone.node->local_transform;
+
+        // ベイク済みキーで上書き
+        std::unordered_map<uint32_t, const ufbx_baked_node*>::const_iterator it =
+            cache.node_by_typed_id.find(bone.node->typed_id);
+
+        if (it != cache.node_by_typed_id.end())
         {
-            const BoneInfo& b = data_.bones_[i];
-            if (b.parent != -1) continue;
+            const ufbx_baked_node* bn = it->second;
 
-            const ufbx_node* node = b.node;
-            if (!node) continue;
-
-#if defined(_DEBUG)
-            const auto tb0 = clock::now();
-#endif
-
-            data_.curr_world_[i] = UfbxUtil::EvaluateNodeWorldRecursive(node, anim, t, cache);
-
-#if defined(_DEBUG)
-            const auto tb1 = clock::now();
-            const double bone_ms = std::chrono::duration<double, std::milli>(tb1 - tb0).count();
-            if (bone_ms > max_bone_ms)
-            {
-                max_bone_ms = bone_ms;
-                max_bone_i = i;
-            }
-#endif
+            xf.translation = eval_vec3(bn->translation_keys, t, xf.translation);
+            xf.rotation = eval_quat(bn->rotation_keys, t, xf.rotation);
+            xf.scale = eval_vec3(bn->scale_keys, t, xf.scale);
         }
 
-        // 残りを評価
-        for (size_t i = 0; i < bone_count; ++i)
+        const ufbx_matrix lm = ufbx_transform_to_matrix(&xf);
+        const DirectX::XMFLOAT4X4 xm_local = UfbxUtil::ToXMMatrix(lm);
+        const DirectX::XMMATRIX L = DirectX::XMLoadFloat4x4(&xm_local);
+
+        DirectX::XMMATRIX W = L;
+        if (bone.parent >= 0)
         {
-            const BoneInfo& b = data_.bones_[i];
-            if (b.parent == -1) continue;
-
-            const ufbx_node* node = b.node;
-            if (!node) continue;
-
-#if defined(_DEBUG)
-            const auto tb0 = clock::now();
-#endif
-
-            data_.curr_world_[i] = UfbxUtil::EvaluateNodeWorldRecursive(node, anim, t, cache);
-
-#if defined(_DEBUG)
-            const auto tb1 = clock::now();
-            const double bone_ms = std::chrono::duration<double, std::milli>(tb1 - tb0).count();
-            if (bone_ms > max_bone_ms)
-            {
-                max_bone_ms = bone_ms;
-                max_bone_i = i;
-            }
-#endif
+            const DirectX::XMFLOAT4X4& parentWorld = data_.curr_world_[static_cast<size_t>(bone.parent)];
+            const DirectX::XMMATRIX PW = DirectX::XMLoadFloat4x4(&parentWorld);
+            W = L*PW;
         }
+
+        DirectX::XMStoreFloat4x4(&data_.curr_world_[i], W);
     }
-
-#if defined(_DEBUG)
-    const auto t4 = clock::now();
-
-    const double ms_total = std::chrono::duration<double, std::milli>(t4 - t0).count();
-    const double ms_clamp = std::chrono::duration<double, std::milli>(t1 - t0).count();
-    const double ms_cache = std::chrono::duration<double, std::milli>(t2 - t1).count();
-    const double ms_resize = std::chrono::duration<double, std::milli>(t3 - t2).count();
-    const double ms_loop = std::chrono::duration<double, std::milli>(t4 - t3).count();
-
-    static int s_count = 0;
-    static double s_sum = 0.0;
-    static double s_max = 0.0;
-    static double s_max_cache = 0.0;
-    static double s_max_resize = 0.0;
-    static double s_max_loop = 0.0;
-    static double s_max_bone = 0.0;
-    static size_t s_max_bone_i = 0;
-
-    ++s_count;
-    s_sum += ms_total;
-    s_max = std::max(s_max, ms_total);
-    s_max_cache = std::max(s_max_cache, ms_cache);
-    s_max_resize = std::max(s_max_resize, ms_resize);
-    s_max_loop = std::max(s_max_loop, ms_loop);
-
-    if (max_bone_ms > s_max_bone)
-    {
-        s_max_bone = max_bone_ms;
-        s_max_bone_i = max_bone_i;
-    }
-
-    if ((s_count % 60) == 0)
-    {
-        const double avg = s_sum / 60.0;
-
-        std::ostringstream oss;
-        oss << "[Anim] UpdateAtTime bones=" << data_.bones_.size()
-            << " cache=" << cache.size()
-            << " avg_ms=" << avg
-            << " max_ms=" << s_max
-            << " max_cache_ms=" << s_max_cache
-            << " max_resize_ms=" << s_max_resize
-            << " max_loop_ms=" << s_max_loop
-            << " max_bone_ms=" << s_max_bone
-            << " max_bone_i=" << s_max_bone_i
-            << "\n";
-
-        const std::string s = oss.str();
-        OutputDebugStringA(s.c_str());
-
-        s_sum = 0.0;
-        s_max = 0.0;
-        s_max_cache = 0.0;
-        s_max_resize = 0.0;
-        s_max_loop = 0.0;
-        s_max_bone = 0.0;
-        s_max_bone_i = 0;
-    }
-#endif
 }
+
 
 
 
