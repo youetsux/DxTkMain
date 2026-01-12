@@ -1,5 +1,6 @@
 #include "Model.h"
 #include "FbxModel.h"
+#include "BakedAnim.h"
 #include "Camera.h"
 #include "Input.h"
 #include "EngineTime.h"
@@ -13,6 +14,10 @@
 #include <unordered_map>
 #include <cstring>
 #include <utility>
+
+#ifndef BAKED_TIME_DEBUG
+#define BAKED_TIME_DEBUG 0
+#endif
 
 //#define DBG_LOG(fmt, ...)                          \
 //do {                                               \
@@ -163,6 +168,14 @@ namespace
         }
         if (fps <= 0.0) fps = 30.0;
 
+        const BakedAnimClip* baked_clip = md.pFbx ? md.pFbx->GetBakedAnimClip() : nullptr;
+        if (baked_clip && baked_clip->sample_rate > 0.0f)
+        {
+            fps = (double)baked_clip->sample_rate;
+        }
+
+        const double baseTimeSec = anim ? anim->time_begin : (baked_clip ? (double)baked_clip->start_time : 0.0);
+
         bool hasAnimSetting =
             (md.anim.endFrame > md.anim.startFrame) &&
             (md.anim.speed != 0.0f);
@@ -226,7 +239,7 @@ namespace
             if (needRecalc)
             {
                 const double secondsPerFrame = 1.0 / fps;
-                md.anim.timeSec = anim->time_begin + double(md.anim.currentFrame) * secondsPerFrame;
+                md.anim.timeSec = baseTimeSec + double(md.anim.currentFrame) * secondsPerFrame;
             }
 
             if (md.pFbx) md.pFbx->UpdateSkeletonAtTime(anim, md.anim.timeSec);
@@ -236,9 +249,84 @@ namespace
             md.anim.currentFrame = (float)md.anim.startFrame;
 
             const double secondsPerFrame = 1.0 / fps;
-            md.anim.timeSec = anim->time_begin + double(md.anim.currentFrame) * secondsPerFrame;
+            md.anim.timeSec = baseTimeSec + double(md.anim.currentFrame) * secondsPerFrame;
 
             if (md.pFbx) md.pFbx->UpdateSkeletonAtTime(anim, md.anim.timeSec);
+        }
+        else if (baked_clip && hasAnimSetting)
+        {
+            const float prevFrame = md.anim.currentFrame;
+
+            if (!md.anim.paused)
+            {
+                const double dtSec = EngineTime::DeltaTime();
+                const double deltaFrames = dtSec * fps * double(md.anim.speed);
+                md.anim.currentFrame += (float)deltaFrames;
+
+                if (md.anim.loop)
+                {
+                    float rangeLen = (float)(md.anim.endFrame - md.anim.startFrame + 1);
+                    if (rangeLen <= 0.0f) rangeLen = 1.0f;
+                    while (md.anim.currentFrame > md.anim.endFrame)   md.anim.currentFrame -= rangeLen;
+                    while (md.anim.currentFrame < md.anim.startFrame) md.anim.currentFrame += rangeLen;
+                }
+                else
+                {
+                    if (md.anim.speed >= 0.0f)
+                    {
+                        if (md.anim.currentFrame > md.anim.endFrame)
+                        {
+                            md.anim.currentFrame = (float)md.anim.endFrame;
+                            md.anim.paused = true;
+                        }
+                        if (md.anim.currentFrame < md.anim.startFrame)
+                        {
+                            md.anim.currentFrame = (float)md.anim.startFrame;
+                        }
+                    }
+                    else
+                    {
+                        if (md.anim.currentFrame < md.anim.startFrame)
+                        {
+                            md.anim.currentFrame = (float)md.anim.startFrame;
+                            md.anim.paused = true;
+                        }
+                        if (md.anim.currentFrame > md.anim.endFrame)
+                        {
+                            md.anim.currentFrame = (float)md.anim.endFrame;
+                        }
+                    }
+                }
+            }
+
+            bool needRecalc = (md.anim.currentFrame != prevFrame);
+            if (!needRecalc && md.anim.timeSec == 0.0)
+            {
+                needRecalc = true;
+            }
+
+            if (needRecalc)
+            {
+                const double secondsPerFrame = 1.0 / fps;
+                md.anim.timeSec = double(baked_clip->start_time) + double(md.anim.currentFrame) * secondsPerFrame;
+            }
+
+#if BAKED_TIME_DEBUG
+            static int s_dbgCount = 0;
+            if ((s_dbgCount++ % 60) == 0)
+            {
+                char buf[256];
+                sprintf_s(buf, "[BakedAnim] timeSec=%.6f frame=%.3f fps=%.2f start=%.6f end=%.6f\n",
+                    (double)md.anim.timeSec,
+                    (double)md.anim.currentFrame,
+                    (double)fps,
+                    (double)baked_clip->start_time,
+                    (double)baked_clip->end_time);
+                OutputDebugStringA(buf);
+            }
+#endif
+
+            if (md.pFbx) md.pFbx->UpdateSkeletonAtTime(md.anim.timeSec);
         }
         else
         {
@@ -311,10 +399,18 @@ namespace Model
         else
         {
             FbxModel* pNew = new FbxModel();
-            if (!pNew->Load(fileName.c_str()))
             {
-                delete pNew;
-                return -1;
+                std::string err;
+                // StepE: import 時に baked を生成し、scene を破棄してランタイムは baked で評価する。
+                // 失敗時は従来ロードにフォールバックし、退行を避ける。
+                if (!pNew->LoadBakedAndDiscardEx(fileName.c_str(), err, false))
+                {
+                    if (!pNew->Load(fileName.c_str()))
+                    {
+                        delete pNew;
+                        return -1;
+                    }
+                }
             }
 
             g_modelCache[fileName] = pNew;
@@ -440,31 +536,29 @@ namespace Model
 
         float height = sy;
 
-        if (scene)
+        const int upAxis = scene ? (int)scene->settings.axes.up : (md.pFbx ? md.pFbx->GetBakedUpAxis() : 0);
+        switch (upAxis)
         {
-            switch (scene->settings.axes.up)
-            {
-            case UFBX_COORDINATE_AXIS_POSITIVE_X:
-            case UFBX_COORDINATE_AXIS_NEGATIVE_X:
-                height = sx;
-                break;
+        case UFBX_COORDINATE_AXIS_POSITIVE_X:
+        case UFBX_COORDINATE_AXIS_NEGATIVE_X:
+            height = sx;
+            break;
 
-            case UFBX_COORDINATE_AXIS_POSITIVE_Y:
-            case UFBX_COORDINATE_AXIS_NEGATIVE_Y:
-                height = sy;
-                break;
+        case UFBX_COORDINATE_AXIS_POSITIVE_Y:
+        case UFBX_COORDINATE_AXIS_NEGATIVE_Y:
+            height = sy;
+            break;
 
-            case UFBX_COORDINATE_AXIS_POSITIVE_Z:
-            case UFBX_COORDINATE_AXIS_NEGATIVE_Z:
-                height = sz;
-                break;
+        case UFBX_COORDINATE_AXIS_POSITIVE_Z:
+        case UFBX_COORDINATE_AXIS_NEGATIVE_Z:
+            height = sz;
+            break;
 
-            default:
-                height = sx;
-                if (sy > height) height = sy;
-                if (sz > height) height = sz;
-                break;
-            }
+        default:
+            height = sx;
+            if (sy > height) height = sy;
+            if (sz > height) height = sz;
+            break;
         }
 
         // ===== root scale debug =====
@@ -658,10 +752,8 @@ namespace Model
         if (!IsValidHandle(handle)) return 0;
 
         auto& md = g_models[handle];
-        const ufbx_scene* scene = md.pFbx ? md.pFbx->Scene() : nullptr;
-        if (!scene) return 0;
-
-        return (int)scene->anim_stacks.count;
+        if (!md.pFbx) return 0;
+        return md.pFbx->GetAnimStackCount();
     }
 
     std::string GetAnimStackName(int handle, int index)
@@ -669,15 +761,8 @@ namespace Model
         if (!IsValidHandle(handle)) return {};
 
         auto& md = g_models[handle];
-        const ufbx_scene* scene = md.pFbx ? md.pFbx->Scene() : nullptr;
-        if (!scene) return {};
-
-        if (index < 0 || (size_t)index >= scene->anim_stacks.count) return {};
-
-        const ufbx_anim_stack* stack = scene->anim_stacks.data[index];
-        if (!stack) return {};
-
-        return std::string(stack->name.data, stack->name.length);
+        if (!md.pFbx) return {};
+        return md.pFbx->GetAnimStackName(index);
     }
 
     void SetAnimStack(int handle, int index)
@@ -685,10 +770,8 @@ namespace Model
         if (!IsValidHandle(handle)) return;
 
         auto& md = g_models[handle];
-        const ufbx_scene* scene = md.pFbx ? md.pFbx->Scene() : nullptr;
-        if (!scene) return;
-
-        if (index < 0 || (size_t)index >= scene->anim_stacks.count) return;
+        if (!md.pFbx) return;
+        if (!md.pFbx->SetAnimStack(index)) return;
 
         md.anim.stackIndex = index;
         md.anim.currentFrame = (float)md.anim.startFrame;
@@ -699,18 +782,15 @@ namespace Model
         if (!IsValidHandle(handle)) return;
 
         auto& md = g_models[handle];
-        const ufbx_scene* scene = md.pFbx ? md.pFbx->Scene() : nullptr;
-        if (!scene) return;
+        if (!md.pFbx) return;
+        if (!md.pFbx->SetAnimStack(stackName)) return;
 
-        for (size_t i = 0; i < scene->anim_stacks.count; ++i)
+        const int count = md.pFbx->GetAnimStackCount();
+        for (int i = 0; i < count; ++i)
         {
-            const ufbx_anim_stack* stack = scene->anim_stacks.data[i];
-            if (!stack) continue;
-
-            if (stackName.size() == stack->name.length &&
-                std::memcmp(stackName.c_str(), stack->name.data, stack->name.length) == 0)
+            if (md.pFbx->GetAnimStackName(i) == stackName)
             {
-                md.anim.stackIndex = (int)i;
+                md.anim.stackIndex = i;
                 md.anim.currentFrame = (float)md.anim.startFrame;
                 return;
             }

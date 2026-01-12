@@ -4,9 +4,12 @@
 #include <memory>
 #include <vector>
 
-#include "FbxMesh.h"
+
 #include "BoundingVolume.h"
 
+
+class FbxMesh;
+class FbxSkeleton;
 //======================================================================
 // FbxMeshGroup
 //   - FBX 内で「ノードごとに分割されているメッシュ」をまとめて扱うための入れ物

@@ -1,4 +1,5 @@
 #pragma once
+#include <cstdint>
 #include <vector>
 #include <DirectXMath.h>
 #include <unordered_map>
@@ -19,7 +20,14 @@ struct BoneInfo
     const ufbx_node* node = nullptr; // このボーンに対応する ufbx のノード
     int              parent = -1;    // 親ボーンのインデックス（なければ -1）
 
+    // ufbx_node* は scene 破棄後に無効になる。
+    // baked runtime で参照できるように ID を保持しておく。
+    uint32_t         node_typed_id = 0xFFFFFFFFu;
+    uint32_t         element_id = 0xFFFFFFFFu;
+
     DirectX::XMFLOAT4X4 bind_world{};           // ボーンのバインド姿勢のワールド行列
+    DirectX::XMFLOAT4X4 node_bind_world{};      // ufbx ノードの bind 時 world（補正用）
+    DirectX::XMFLOAT4X4 bind_fix_world{};       // bind_world * inverse(node_bind_world)
     DirectX::XMFLOAT4X4 inv_bind_world{};       // 上の逆行列
     DirectX::XMFLOAT4X4 geom_bind_world{};      // ジオメトリ → ボーン の変換行列
     DirectX::XMFLOAT4X4 inv_geom_bind_world{};  // その逆行列
@@ -46,6 +54,9 @@ struct SkeletonData
     // ufbx_node* からボーン番号（uint16_t）を引くための辞書
     std::unordered_map<const ufbx_node*, uint16_t> bone_index_of_;
 
+    // element_id -> bone index (for baked skin bone remap)
+    std::unordered_map<uint32_t, uint16_t> bone_index_of_element_id_;
+
     // CPU スキニングで使うスキン行列の配列（毎フレーム更新）
     std::vector<DirectX::XMMATRIX> skin_mats_;
 
@@ -67,12 +78,17 @@ public:
 
     // 追加関数
     const std::unordered_map<const ufbx_node*, uint16_t>& BoneIndexMap() const;
+    bool FindBoneIndexByElementId(uint32_t element_id, uint16_t& out_index) const;
     const std::vector<DirectX::XMMATRIX>& SkinMatrices() const;
     std::vector<DirectX::XMMATRIX>& SkinMatrices(); // 書き込みしたい場合用
 
 public:
     bool BuildFromScene(const ufbx_scene* scene);
     void UpdateAtTime(const ufbx_scene* scene, const ufbx_anim* anim, double t_sec);
+
+    // baked runtime 用：typed_id インデックスの node world 行列配列から curr_world_ を更新する
+    void UpdateFromBakedWorldMatrices(const std::vector<DirectX::XMMATRIX>& node_world);
+
     void DrawDebug(const DirectX::XMMATRIX& world,
         const DirectX::XMMATRIX& view,
         const DirectX::XMMATRIX& proj);

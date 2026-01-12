@@ -30,71 +30,71 @@ using Microsoft::WRL::ComPtr;
 // ------------------------------------------------------------
 static Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> CreateCheckerboardSRV(ID3D11Device* device)
 {
-    Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> srv;
-    if (!device) return srv;
+	Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> srv;
+	if (!device) return srv;
 
-    const UINT w = 64;
-    const UINT h = 64;
-    const UINT check = 8; // squares per side
-    std::vector<uint32_t> pixels;
-    pixels.resize(size_t(w) * size_t(h));
+	const UINT w = 64;
+	const UINT h = 64;
+	const UINT check = 8; // squares per side
+	std::vector<uint32_t> pixels;
+	pixels.resize(size_t(w) * size_t(h));
 
-    for (UINT y = 0; y < h; ++y) {
-        for (UINT x = 0; x < w; ++x) {
-            const UINT cx = (x * check) / w;
-            const UINT cy = (y * check) / h;
-            const bool odd = ((cx ^ cy) & 1) != 0;
-            const uint8_t v = odd ? 0xFF : 0x20;
-            pixels[size_t(y) * size_t(w) + size_t(x)] =
-                0xFF000000u | (uint32_t(v) << 16) | (uint32_t(v) << 8) | uint32_t(v);
-        }
-    }
+	for (UINT y = 0; y < h; ++y) {
+		for (UINT x = 0; x < w; ++x) {
+			const UINT cx = (x * check) / w;
+			const UINT cy = (y * check) / h;
+			const bool odd = ((cx ^ cy) & 1) != 0;
+			const uint8_t v = odd ? 0xFF : 0x20;
+			pixels[size_t(y) * size_t(w) + size_t(x)] =
+				0xFF000000u | (uint32_t(v) << 16) | (uint32_t(v) << 8) | uint32_t(v);
+		}
+	}
 
-    D3D11_TEXTURE2D_DESC td = {};
-    td.Width = w;
-    td.Height = h;
-    td.MipLevels = 1;
-    td.ArraySize = 1;
-    td.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-    td.SampleDesc.Count = 1;
-    td.Usage = D3D11_USAGE_IMMUTABLE;
-    td.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+	D3D11_TEXTURE2D_DESC td = {};
+	td.Width = w;
+	td.Height = h;
+	td.MipLevels = 1;
+	td.ArraySize = 1;
+	td.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	td.SampleDesc.Count = 1;
+	td.Usage = D3D11_USAGE_IMMUTABLE;
+	td.BindFlags = D3D11_BIND_SHADER_RESOURCE;
 
-    D3D11_SUBRESOURCE_DATA init = {};
-    init.pSysMem = pixels.data();
-    init.SysMemPitch = w * sizeof(uint32_t);
+	D3D11_SUBRESOURCE_DATA init = {};
+	init.pSysMem = pixels.data();
+	init.SysMemPitch = w * sizeof(uint32_t);
 
-    Microsoft::WRL::ComPtr<ID3D11Texture2D> tex;
-    if (FAILED(device->CreateTexture2D(&td, &init, tex.GetAddressOf()))) {
-        return srv;
-    }
+	Microsoft::WRL::ComPtr<ID3D11Texture2D> tex;
+	if (FAILED(device->CreateTexture2D(&td, &init, tex.GetAddressOf()))) {
+		return srv;
+	}
 
-    D3D11_SHADER_RESOURCE_VIEW_DESC sd = {};
-    sd.Format = td.Format;
-    sd.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
-    sd.Texture2D.MipLevels = 1;
+	D3D11_SHADER_RESOURCE_VIEW_DESC sd = {};
+	sd.Format = td.Format;
+	sd.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+	sd.Texture2D.MipLevels = 1;
 
-    device->CreateShaderResourceView(tex.Get(), &sd, srv.GetAddressOf());
-    return srv;
+	device->CreateShaderResourceView(tex.Get(), &sd, srv.GetAddressOf());
+	return srv;
 }
 
 // Cache per-process (device pointer check)
 static Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> GetCheckerboardSRV(ID3D11Device* device)
 {
-    static ID3D11Device* s_device = nullptr;
-    static Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> s_srv;
+	static ID3D11Device* s_device = nullptr;
+	static Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> s_srv;
 
-    if (!device) {
-        s_device = nullptr;
-        s_srv.Reset();
-        return s_srv;
-    }
+	if (!device) {
+		s_device = nullptr;
+		s_srv.Reset();
+		return s_srv;
+	}
 
-    if (s_device != device || !s_srv) {
-        s_device = device;
-        s_srv = CreateCheckerboardSRV(device);
-    }
-    return s_srv;
+	if (s_device != device || !s_srv) {
+		s_device = device;
+		s_srv = CreateCheckerboardSRV(device);
+	}
+	return s_srv;
 }
 
 namespace FbxMeshBuild
@@ -684,7 +684,7 @@ bool FbxMesh::BuildFromScene(const ufbx_scene* scene,
 	FbxSkeleton& skeleton,
 	const char* fbx_path)
 {
-	
+
 	force_checker_texture_ = false;
 	if (!scene) return false;
 
@@ -714,7 +714,7 @@ bool FbxMesh::BuildFromNode(const ufbx_scene* scene,
 	FbxSkeleton& skeleton,
 	const char* fbx_path)
 {
-	
+
 	force_checker_texture_ = false;
 	if (!scene || !node || !node->mesh) return false;
 
@@ -748,7 +748,7 @@ bool FbxMesh::BuildFromNode(const ufbx_scene* scene,
 
 bool FbxMesh::BuildFromBaked(const BakedMeshImportResult& src, const ufbx_scene* scene, const char* fbx_path)
 {
-	
+
 	force_checker_texture_ = true;
 	// 入力検証
 	if (!src.IsValid()) return false;
@@ -787,9 +787,23 @@ bool FbxMesh::BuildFromBaked(const BakedMeshImportResult& src, const ufbx_scene*
 		mesh_.influences_.resize(src.skin.size());
 		for (size_t i = 0; i < src.skin.size(); ++i) {
 			VertexInfluence inf{};
+			float sum = 0.0f;
+			const uint32_t localBoneCount = (uint32_t)mesh_.skin_bone_node_element_ids_.size();
 			for (int k = 0; k < 4; ++k) {
-				inf.bone[k] = src.skin[i].bone[k];
-				inf.weight[k] = src.skin[i].weight[k];
+				uint16_t b = src.skin[i].bone[k];
+				float w = src.skin[i].weight[k];
+				if (!(w == w) || w < 0.0f) { w = 0.0f; } // NaN/negative
+				if (localBoneCount > 0 && b >= localBoneCount) { b = 0; w = 0.0f; }
+				inf.bone[k] = b;
+				inf.weight[k] = w;
+				sum += w;
+			}
+			if (sum > 0.0f) {
+				const float inv = 1.0f / sum;
+				for (int k = 0; k < 4; ++k) inf.weight[k] *= inv;
+			}
+			else {
+				inf.bone[0] = 0; inf.weight[0] = 1.0f;
 			}
 			mesh_.influences_[i] = inf;
 		}
@@ -803,12 +817,12 @@ bool FbxMesh::BuildFromBaked(const BakedMeshImportResult& src, const ufbx_scene*
 		{
 			MeshPart p;
 			p.mat = nullptr;
-            if (scene) {
-                uint32_t mi = s.material_index;
-                if (mi < scene->materials.count) {
-                    p.mat = scene->materials.data[mi];
-                }
-            }
+			if (scene) {
+				uint32_t mi = s.material_index;
+				if (mi < scene->materials.count) {
+					p.mat = scene->materials.data[mi];
+				}
+			}
 			p.start_index = s.index_start;
 			p.index_count = s.index_count;
 			p.srv.Reset();
@@ -825,9 +839,6 @@ bool FbxMesh::BuildFromBaked(const BakedMeshImportResult& src, const ufbx_scene*
 		p.srv.Reset();
 		mesh_.parts_.push_back(std::move(p));
 	}
-
-	// スキニング無し
-	has_skinning_ = false;
 
 	// GPU バッファ生成（既存の描画経路を利用）
 	if (!CreateGpuBuffers()) {
@@ -1355,63 +1366,203 @@ void FbxMesh::UpdateSkinningIfNeeded(
 	ID3D11DeviceContext* ctx,
 	FbxSkeleton& skeleton)
 {
-	if (!has_skinning_) return;
+
+	// Debug: verify whether CPU skinning path is actually executed.
+	// If this never runs, the mesh will stay in bind pose (T-pose).
+	static int s_skinGateDbg = 0;
+	if ((s_skinGateDbg++ % 120) == 0) // ~2 seconds at 60fps
+	{
+		char buf[256];
+		sprintf_s(buf, "[SkinGate] has_skin=%d infl=%zu bind=%zu skinned=%zu bones=%zu\n",
+			has_skinning_ ? 1 : 0,
+			mesh_.influences_.size(),
+			mesh_.bind_vertices_.size(),
+			mesh_.skinned_vertices_.size(),
+			skeleton.Bones().size());
+		OutputDebugStringA(buf);
+	}
+
+	if (!has_skinning_)
+	{
+		if ((s_skinGateDbg % 120) == 1) { OutputDebugStringA("[SkinGate] skip: has_skinning_=false\n"); }
+		return;
+	}
 
 	// 影響情報が無い / バインド頂点が無いなら更新できない
-	if (mesh_.influences_.empty()) return;
-	if (mesh_.bind_vertices_.empty()) return;
+	if (mesh_.influences_.empty())
+	{
+		if ((s_skinGateDbg % 120) == 1) { OutputDebugStringA("[SkinGate] skip: influences empty\n"); }
+		return;
+	}
+	if (mesh_.bind_vertices_.empty())
+	{
+		if ((s_skinGateDbg % 120) == 1) { OutputDebugStringA("[SkinGate] skip: bind_vertices empty\n"); }
+		return;
+	}
 
+
+	// If the skeleton instance changed since last call, invalidate cached remap/mode.
+	// (Some scenes/models can be drawn with different skeletons; stale remap breaks skinning.)
+	if (last_remap_skeleton_ptr_ != (uintptr_t)&skeleton || last_remap_bone_count_ != skeleton.Bones().size())
+	{
+		last_remap_skeleton_ptr_ = (uintptr_t)&skeleton;
+		last_remap_bone_count_ = skeleton.Bones().size();
+		skin_bones_remapped_ = false;
+		skin_mode_decided_ = false;
+	}
 	// For baked meshes, influences may store local bone indices (0..N) that need remapping
 	// to skeleton bone indices. Do this once.
 	if (!skin_bones_remapped_ && !mesh_.skin_bone_node_element_ids_.empty()) {
-		std::unordered_map<uint32_t, uint16_t> element_to_bone;
-		element_to_bone.reserve(skeleton.Bones().size());
-		for (uint16_t i = 0; i < (uint16_t)skeleton.Bones().size(); ++i) {
-			const ufbx_node* n = skeleton.Bones()[i].node;
-			if (!n) continue;
-			element_to_bone[(uint32_t)n->element_id] = i;
-		}
-
-		std::vector<uint16_t> remap(mesh_.skin_bone_node_element_ids_.size(), 0xFFFF);
-		for (size_t i = 0; i < mesh_.skin_bone_node_element_ids_.size(); ++i) {
-			uint32_t eid = mesh_.skin_bone_node_element_ids_[i];
-			auto it = element_to_bone.find(eid);
-			if (it != element_to_bone.end()) remap[i] = it->second;
-		}
-
-		// Remap influences in-place, dropping missing bones
-		for (auto& inf : mesh_.influences_) {
-			float sum = 0.0f;
+		// Some assets already store skeleton bone indices in influences_.
+		// In that case, applying the local->skeleton remap again will corrupt indices.
+		uint16_t max_bone = 0;
+		for (const auto& inf : mesh_.influences_) {
 			for (int k = 0; k < 4; ++k) {
-				float w = inf.weight[k];
-				if (w <= 0.0f) { inf.weight[k] = 0.0f; inf.bone[k] = 0; continue; }
-				uint16_t local = inf.bone[k];
-				uint16_t sk = (local < remap.size()) ? remap[local] : 0xFFFF;
-				if (sk == 0xFFFF) {
-					inf.weight[k] = 0.0f;
-					inf.bone[k] = 0;
-				} else {
-					inf.bone[k] = sk;
-					sum += inf.weight[k];
+				if (inf.weight[k] <= 0.0f) continue;
+				max_bone = std::max<uint16_t>(max_bone, inf.bone[k]);
+			}
+		}
+		if (max_bone >= mesh_.skin_bone_node_element_ids_.size()) {
+			// Treat as already skeleton-indexed.
+			OutputDebugStringA("[SkinRemap] skip: influences look skeleton-indexed\n");
+			skin_bones_remapped_ = true;
+		}
+		else {
+			std::unordered_map<uint32_t, uint16_t> element_to_bone;
+			element_to_bone.reserve(skeleton.Bones().size());
+			for (uint16_t i = 0; i < (uint16_t)skeleton.Bones().size(); ++i) {
+				uint32_t eid = skeleton.Bones()[i].element_id;
+				if (eid == 0xFFFFFFFFu) continue;
+				element_to_bone[eid] = i;
+			}
+
+			std::vector<uint16_t> remap(mesh_.skin_bone_node_element_ids_.size(), 0xFFFF);
+			for (size_t i = 0; i < mesh_.skin_bone_node_element_ids_.size(); ++i) {
+				uint32_t eid = mesh_.skin_bone_node_element_ids_[i];
+				auto it = element_to_bone.find(eid);
+				if (it != element_to_bone.end()) remap[i] = it->second;
+			}
+
+			// Remap influences in-place, dropping missing bones
+			for (auto& inf : mesh_.influences_) {
+				float sum = 0.0f;
+				for (int k = 0; k < 4; ++k) {
+					float w = inf.weight[k];
+					if (w <= 0.0f) { inf.weight[k] = 0.0f; inf.bone[k] = 0; continue; }
+					uint16_t local = inf.bone[k];
+					uint16_t sk = (local < remap.size()) ? remap[local] : 0xFFFF;
+					if (sk == 0xFFFF) {
+						inf.weight[k] = 0.0f;
+						inf.bone[k] = 0;
+					}
+					else {
+						inf.bone[k] = sk;
+						sum += inf.weight[k];
+					}
+				}
+				if (sum > 0.0f) {
+					float inv = 1.0f / sum;
+					for (int k = 0; k < 4; ++k) inf.weight[k] *= inv;
 				}
 			}
-			if (sum > 0.0f) {
-				float inv = 1.0f / sum;
-				for (int k = 0; k < 4; ++k) inf.weight[k] *= inv;
-			}
+			skin_bones_remapped_ = true;
 		}
-		skin_bones_remapped_ = true;
+	}
+
+
+	// Decide skinning matrix mode once per mesh.
+	// Choose the mode that yields matrices closer to a rigid transform (scale ~ 1, orthogonal axes).
+	if (has_skinning_ && !skin_mode_decided_)
+	{
+		use_geom_bind_for_skinning_ = false;
+		float score_invbind = 0.0f;
+		float score_geombind = 0.0f;
+		const size_t n = std::min<size_t>(skeleton.Bones().size(), 8);
+		for (size_t i = 0; i < n; ++i)
+		{
+			DirectX::XMMATRIX W = DirectX::XMLoadFloat4x4(&skeleton.CurrWorld()[i]);
+			if (!use_geom_bind_for_skinning_) {
+				// Align node-evaluated bone world with cluster bind_to_world when they differ.
+				const DirectX::XMMATRIX FIX = DirectX::XMLoadFloat4x4(&skeleton.Bones()[i].bind_fix_world);
+				W = DirectX::XMMatrixMultiply(FIX, W);
+			}
+			DirectX::XMMATRIX IB = DirectX::XMLoadFloat4x4(&skeleton.Bones()[i].inv_bind_world);
+			DirectX::XMMATRIX G2B = DirectX::XMLoadFloat4x4(&skeleton.Bones()[i].geom_bind_world);
+
+			auto score_matrix = [](const DirectX::XMMATRIX& M) -> float {
+				DirectX::XMFLOAT4X4 m;
+				DirectX::XMStoreFloat4x4(&m, M);
+				// Column vectors (treating matrix as transform with basis in columns)
+				auto len3 = [](float x, float y, float z) {
+					return std::sqrtf(x * x + y * y + z * z);
+					};
+				float c0x = m._11, c0y = m._21, c0z = m._31;
+				float c1x = m._12, c1y = m._22, c1z = m._32;
+				float c2x = m._13, c2y = m._23, c2z = m._33;
+				float l0 = len3(c0x, c0y, c0z);
+				float l1 = len3(c1x, c1y, c1z);
+				float l2 = len3(c2x, c2y, c2z);
+				float scale_dev = std::fabsf(l0 - 1.0f) + std::fabsf(l1 - 1.0f) + std::fabsf(l2 - 1.0f);
+				// Orthogonality penalty (dot products should be ~0)
+				float d01 = c0x * c1x + c0y * c1y + c0z * c1z;
+				float d02 = c0x * c2x + c0y * c2y + c0z * c2z;
+				float d12 = c1x * c2x + c1y * c2y + c1z * c2z;
+				float ortho = std::fabsf(d01) + std::fabsf(d02) + std::fabsf(d12);
+				return scale_dev + ortho;
+				};
+
+			score_invbind += score_matrix(DirectX::XMMatrixMultiply(IB, W));
+			score_geombind += score_matrix(DirectX::XMMatrixMultiply(W, G2B));
+		}
+
+		use_geom_bind_for_skinning_ = (score_geombind + 1e-6f) < score_invbind;
+		skin_mode_decided_ = true;
+		OutputDebugStringA(use_geom_bind_for_skinning_ ? "[SkinMode] using geom_bind_world\n" : "[SkinMode] using inv_bind_world\n");
 	}
 
 	// ボーン数に合わせてスキン行列配列を準備
 	auto& skin_mats = skeleton.SkinMatrices();
-	skin_mats.resize(skeleton.Bones().size());
 
-	// 各ボーンのスキン行列を作る（geom_bind_world と 現在ワールドの合成）
+	// Debug: confirm skeleton current world is changing (throttled)
+	{
+		static ULONGLONG s_last = 0;
+		ULONGLONG now = GetTickCount64();
+		if (now - s_last >= 2000)
+		{
+			s_last = now;
+			if (!skeleton.CurrWorld().empty())
+			{
+				const auto& m0 = skeleton.CurrWorld()[0];
+				char buf[256];
+				std::snprintf(buf, sizeof(buf),
+					"[BakedMesh] currWorld0T=(%.3f,%.3f,%.3f) bones=%zu\n",
+					m0._41, m0._42, m0._43, skeleton.CurrWorld().size());
+				OutputDebugStringA(buf);
+			}
+		}
+	}
+
+	skin_mats.resize(skeleton.Bones().size());
+	// 各ボーンのスキン行列を作る
+	// bind pose では W == bind_world なので inv_bind_world * W == Identity となり、
+	// バインド頂点（bind_vertices_）がそのまま出力される。
 	for (size_t i = 0; i < skeleton.Bones().size(); ++i) {
 		DirectX::XMMATRIX W = DirectX::XMLoadFloat4x4(&skeleton.CurrWorld()[i]);
-		DirectX::XMMATRIX G2B = DirectX::XMLoadFloat4x4(&skeleton.Bones()[i].geom_bind_world);
-		skin_mats[i] = DirectX::XMMatrixMultiply(G2B, W);
+		if (!use_geom_bind_for_skinning_) {
+			// Align node-evaluated bone world with cluster bind_to_world when they differ.
+			const DirectX::XMMATRIX FIX = DirectX::XMLoadFloat4x4(&skeleton.Bones()[i].bind_fix_world);
+			W = DirectX::XMMatrixMultiply(FIX, W);
+		}
+		// Most assets work with inv_bind_world * W.
+				// Some assets require bone_world * geometry_to_bone (geom_bind_world) due to non-identity mesh geometry transforms.
+		if (use_geom_bind_for_skinning_) {
+			DirectX::XMMATRIX G2B = DirectX::XMLoadFloat4x4(&skeleton.Bones()[i].geom_bind_world);
+			skin_mats[i] = DirectX::XMMatrixMultiply(W, G2B);
+		}
+		else {
+			DirectX::XMMATRIX IB = DirectX::XMLoadFloat4x4(&skeleton.Bones()[i].inv_bind_world);
+			skin_mats[i] = DirectX::XMMatrixMultiply(IB, W);
+		}
 	}
 
 	// CPU スキニング実行（bind -> skinned を更新）

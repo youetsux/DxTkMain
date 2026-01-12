@@ -1,10 +1,18 @@
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <Windows.h>
+
 #include "FbxSkeleton.h"
 #include "ufbx.h"
 #include "UfbxUtil.h"
-#include "Gfx.h"        // DrawDebug �実装時に使う想定（今は未使用）
+#include "Gfx.h"        // DrawDebug (unused)
 #include <Effects.h>
 
 #include <unordered_map>
+
+#ifndef ANIM_UPDATE_PROFILING
+#define ANIM_UPDATE_PROFILING 0
+#endif
 
 //------------------------------------------------------------
 // 内部ヘルパ（匿名名前空間）
@@ -31,6 +39,21 @@ namespace
 
         BoneInfo info;
         info.node = node;
+        if (node)
+        {
+            info.node_typed_id = node->typed_id;
+            info.element_id = (uint32_t)node->element_id;
+        }
+        // default matrices: identity (safe even when no skin cluster)
+        {
+            const DirectX::XMMATRIX I = DirectX::XMMatrixIdentity();
+            DirectX::XMStoreFloat4x4(&info.bind_world, I);
+            DirectX::XMStoreFloat4x4(&info.inv_bind_world, I);
+            DirectX::XMStoreFloat4x4(&info.geom_bind_world, I);
+            DirectX::XMStoreFloat4x4(&info.inv_geom_bind_world, I);
+            DirectX::XMStoreFloat4x4(&info.node_bind_world, I);
+            DirectX::XMStoreFloat4x4(&info.bind_fix_world, I);
+        }
         skeleton.bones_.push_back(info);
         return idx;
     }
@@ -70,6 +93,17 @@ const std::unordered_map<const ufbx_node*, uint16_t>& FbxSkeleton::BoneIndexMap(
     return data_.bone_index_of_;
 }
 
+
+
+bool FbxSkeleton::FindBoneIndexByElementId(uint32_t element_id, uint16_t& out_index) const
+{
+    auto it = data_.bone_index_of_element_id_.find(element_id);
+    if (it == data_.bone_index_of_element_id_.end()) {
+        return false;
+    }
+    out_index = it->second;
+    return true;
+}
 const std::vector<DirectX::XMMATRIX>& FbxSkeleton::SkinMatrices() const
 {
     return data_.skin_mats_;
@@ -86,6 +120,7 @@ bool FbxSkeleton::BuildFromScene(const ufbx_scene* scene)
     data_.bones_.clear();
     data_.curr_world_.clear();
     data_.bone_index_of_.clear();
+    data_.bone_index_of_element_id_.clear();
     data_.skin_mats_.clear();
     data_.scene_radius_ = 1.0f;
 
@@ -119,6 +154,19 @@ bool FbxSkeleton::BuildFromScene(const ufbx_scene* scene)
                 data_.bones_[bi].bind_world =
                     UfbxUtil::ToXMMatrix(cl->bind_to_world);
 
+
+                // ufbx のノード bind world と cluster の bind_to_world がズレる FBX 対策：
+                // fix = bind_to_world * inverse(node_bind_world)
+                data_.bones_[bi].node_bind_world =
+                    // ufbx_node のワールド行列は node_to_world
+                    UfbxUtil::ToXMMatrix(cl->bone_node->node_to_world);
+                {
+                    const DirectX::XMMATRIX B = DirectX::XMLoadFloat4x4(&data_.bones_[bi].bind_world);
+                    const DirectX::XMMATRIX NB = DirectX::XMLoadFloat4x4(&data_.bones_[bi].node_bind_world);
+                    const DirectX::XMMATRIX invNB = DirectX::XMMatrixInverse(nullptr, NB);
+                    const DirectX::XMMATRIX fix = DirectX::XMMatrixMultiply(B, invNB);
+                    DirectX::XMStoreFloat4x4(&data_.bones_[bi].bind_fix_world, fix);
+                }
                 // バインド姿勢の逆行列も作っておく
                 {
                     DirectX::XMMATRIX B =
@@ -169,6 +217,9 @@ bool FbxSkeleton::BuildFromScene(const ufbx_scene* scene)
         if (data_.bones_[i].node && i < 0x10000) {
             uint16_t i16 = static_cast<uint16_t>(i);
             data_.bone_index_of_[data_.bones_[i].node] = i16;
+            if (data_.bones_[i].element_id != 0xFFFFFFFFu) {
+                data_.bone_index_of_element_id_[data_.bones_[i].element_id] = i16;
+            }
         }
     }
 
@@ -180,7 +231,7 @@ void FbxSkeleton::UpdateAtTime(const ufbx_scene* scene, const ufbx_anim* anim, d
     if (!scene || !anim) return;
     if (data_.bones_.empty()) return;
 
-#if defined(_DEBUG)
+#if defined(_DEBUG) && ANIM_UPDATE_PROFILING
     using clock = std::chrono::high_resolution_clock;
     const auto t0 = clock::now();
 #endif
@@ -193,7 +244,7 @@ void FbxSkeleton::UpdateAtTime(const ufbx_scene* scene, const ufbx_anim* anim, d
         if (t > anim->time_end)   t = anim->time_end;
     }
 
-#if defined(_DEBUG)
+#if defined(_DEBUG) && ANIM_UPDATE_PROFILING
     const auto t1 = clock::now();
 #endif
 
@@ -210,7 +261,7 @@ void FbxSkeleton::UpdateAtTime(const ufbx_scene* scene, const ufbx_anim* anim, d
     ufbx_error error = {};
     ufbx_scene* eval_scene = ufbx_evaluate_scene(scene, anim, t, nullptr, &error);
 
-#if defined(_DEBUG)
+#if defined(_DEBUG) && ANIM_UPDATE_PROFILING
     const auto t2 = clock::now();
 #endif
 
@@ -228,7 +279,7 @@ void FbxSkeleton::UpdateAtTime(const ufbx_scene* scene, const ufbx_anim* anim, d
         data_.curr_world_.resize(bone_count);
     }
 
-#if defined(_DEBUG)
+#if defined(_DEBUG) && ANIM_UPDATE_PROFILING
     const auto t3 = clock::now();
     double max_bone_ms = 0.0;
     size_t max_bone_i = 0;
@@ -249,13 +300,21 @@ void FbxSkeleton::UpdateAtTime(const ufbx_scene* scene, const ufbx_anim* anim, d
             const ufbx_node* eval_node = eval_scene->nodes.data[node_index];
             if (!eval_node) continue;
 
-#if defined(_DEBUG)
+#if defined(_DEBUG) && ANIM_UPDATE_PROFILING
             const auto tb0 = clock::now();
 #endif
 
-            data_.curr_world_[i] = UfbxUtil::ToXMMatrix(eval_node->node_to_world);
+            // Apply per-bone correction between the node bind world and the cluster bind world.
+            // (Some assets have a non-identity delta here.)
+            {
+                const DirectX::XMMATRIX Fix = DirectX::XMLoadFloat4x4(&data_.bones_[i].bind_fix_world);
+                const DirectX::XMFLOAT4X4 wn_f = UfbxUtil::ToXMMatrix(eval_node->node_to_world);
+                const DirectX::XMMATRIX Wn = DirectX::XMLoadFloat4x4(&wn_f);
+                const DirectX::XMMATRIX W = DirectX::XMMatrixMultiply(Fix, Wn);
+                DirectX::XMStoreFloat4x4(&data_.curr_world_[i], W);
+            }
 
-#if defined(_DEBUG)
+#if defined(_DEBUG) && ANIM_UPDATE_PROFILING
             const auto tb1 = clock::now();
             const double bone_ms = std::chrono::duration<double, std::milli>(tb1 - tb0).count();
             if (bone_ms > max_bone_ms)
@@ -280,13 +339,19 @@ void FbxSkeleton::UpdateAtTime(const ufbx_scene* scene, const ufbx_anim* anim, d
             const ufbx_node* node = b.node;
             if (!node) continue;
 
-#if defined(_DEBUG)
+#if defined(_DEBUG) && ANIM_UPDATE_PROFILING
             const auto tb0 = clock::now();
 #endif
 
-            data_.curr_world_[i] = UfbxUtil::EvaluateNodeWorldRecursive(node, anim, t, cache);
+            {
+                const DirectX::XMMATRIX Fix = DirectX::XMLoadFloat4x4(&data_.bones_[i].bind_fix_world);
+                const DirectX::XMFLOAT4X4 wn_f = UfbxUtil::EvaluateNodeWorldRecursive(node, anim, t, cache);
+                const DirectX::XMMATRIX Wn = DirectX::XMLoadFloat4x4(&wn_f);
+                const DirectX::XMMATRIX W = DirectX::XMMatrixMultiply(Fix, Wn);
+                DirectX::XMStoreFloat4x4(&data_.curr_world_[i], W);
+            }
 
-#if defined(_DEBUG)
+#if defined(_DEBUG) && ANIM_UPDATE_PROFILING
             const auto tb1 = clock::now();
             const double bone_ms = std::chrono::duration<double, std::milli>(tb1 - tb0).count();
             if (bone_ms > max_bone_ms)
@@ -306,13 +371,19 @@ void FbxSkeleton::UpdateAtTime(const ufbx_scene* scene, const ufbx_anim* anim, d
             const ufbx_node* node = b.node;
             if (!node) continue;
 
-#if defined(_DEBUG)
+#if defined(_DEBUG) && ANIM_UPDATE_PROFILING
             const auto tb0 = clock::now();
 #endif
 
-            data_.curr_world_[i] = UfbxUtil::EvaluateNodeWorldRecursive(node, anim, t, cache);
+            {
+                const DirectX::XMMATRIX Fix = DirectX::XMLoadFloat4x4(&data_.bones_[i].bind_fix_world);
+                const DirectX::XMFLOAT4X4 wn_f = UfbxUtil::EvaluateNodeWorldRecursive(node, anim, t, cache);
+                const DirectX::XMMATRIX Wn = DirectX::XMLoadFloat4x4(&wn_f);
+                const DirectX::XMMATRIX W = DirectX::XMMatrixMultiply(Fix, Wn);
+                DirectX::XMStoreFloat4x4(&data_.curr_world_[i], W);
+            }
 
-#if defined(_DEBUG)
+#if defined(_DEBUG) && ANIM_UPDATE_PROFILING
             const auto tb1 = clock::now();
             const double bone_ms = std::chrono::duration<double, std::milli>(tb1 - tb0).count();
             if (bone_ms > max_bone_ms)
@@ -324,7 +395,7 @@ void FbxSkeleton::UpdateAtTime(const ufbx_scene* scene, const ufbx_anim* anim, d
         }
     }
 
-#if defined(_DEBUG)
+#if defined(_DEBUG) && ANIM_UPDATE_PROFILING
     const auto t4 = clock::now();
 
     const double ms_total = std::chrono::duration<double, std::milli>(t4 - t0).count();
@@ -383,6 +454,65 @@ void FbxSkeleton::UpdateAtTime(const ufbx_scene* scene, const ufbx_anim* anim, d
         s_max_bone_i = 0;
     }
 #endif
+}
+
+void FbxSkeleton::UpdateFromBakedWorldMatrices(const std::vector<DirectX::XMMATRIX>& node_world)
+{
+    if (data_.bones_.empty()) return;
+
+    const size_t bone_count = data_.bones_.size();
+
+    if (data_.curr_world_.size() != bone_count)
+    {
+        data_.curr_world_.resize(bone_count);
+    }
+
+    for (size_t i = 0; i < bone_count; ++i)
+    {
+        const uint32_t node_index = data_.bones_[i].node_typed_id;
+        if (node_index != 0xFFFFFFFFu && node_index < node_world.size())
+        {
+            const DirectX::XMMATRIX Fix = DirectX::XMLoadFloat4x4(&data_.bones_[i].bind_fix_world);
+            const DirectX::XMMATRIX W = DirectX::XMMatrixMultiply(Fix, node_world[node_index]);
+            DirectX::XMStoreFloat4x4(&data_.curr_world_[i], W);
+        }
+        else
+        {
+            // 対応するノードが無い場合はバインド姿勢を維持
+            data_.curr_world_[i] = data_.bones_[i].bind_world;
+        }
+    }
+    // Debug: confirm baked world matrices are applied to skeleton (throttled)
+    {
+        static ULONGLONG s_last = 0;
+        ULONGLONG now = GetTickCount64();
+        if (now - s_last >= 2000)
+        {
+            s_last = now;
+
+            size_t used_bind = 0;
+            for (size_t i = 0; i < bone_count; ++i)
+            {
+                const uint32_t node_index = data_.bones_[i].node_typed_id;
+                if (!(node_index != 0xFFFFFFFFu && node_index < node_world.size()))
+                {
+                    used_bind++;
+                }
+            }
+
+            float t0x = data_.curr_world_.empty() ? 0.0f : data_.curr_world_[0]._41;
+            float t0y = data_.curr_world_.empty() ? 0.0f : data_.curr_world_[0]._42;
+            float t0z = data_.curr_world_.empty() ? 0.0f : data_.curr_world_[0]._43;
+
+            uint32_t bone0_node = data_.bones_.empty() ? 0xFFFFFFFFu : data_.bones_[0].node_typed_id;
+
+            char buf[256];
+            std::snprintf(buf, sizeof(buf),
+                "[BakedSkel] bones=%zu nodeWorld=%zu bone0_node=%u currT0=(%.3f,%.3f,%.3f) usedBind=%zu\n",
+                bone_count, node_world.size(), bone0_node, t0x, t0y, t0z, used_bind);
+            OutputDebugStringA(buf);
+        }
+    }
 }
 
 

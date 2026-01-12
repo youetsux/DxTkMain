@@ -85,6 +85,9 @@ public:
 
         // For baked skinning: local bone index -> ufbx_node::element_id
         std::vector<uint32_t>         skin_bone_node_element_ids_;
+
+        // Influences bone indices already refer to Skeleton bone indices (no runtime remap needed)
+        bool                       influences_are_skeleton_indices_ = false;
     };
 
 public:
@@ -238,6 +241,11 @@ private:
     BVolume bounds_;
     bool    has_skinning_ = false;
     bool    skin_bones_remapped_ = false;
+    bool    skin_mode_decided_ = false;
+    bool    use_geom_bind_for_skinning_ = false;
+    // Remap/mode depend on which skeleton is used (avoid stale mapping when skeleton differs)
+    uintptr_t last_remap_skeleton_ptr_ = 0;
+    size_t    last_remap_bone_count_ = 0;
+
     bool    force_checker_texture_ = false;
 };
-
