@@ -260,8 +260,7 @@ bool FbxModel::LoadScene(const char* fbx_path)
         last_error_.clear();
         if (err.description.data && err.description.length > 0) {
             last_error_.append(err.description.data, err.description.length);
-        }
-        else {
+        } else {
             last_error_ = "ufbx_load_file failed";
         }
         if (err.info_length > 0) {
@@ -960,8 +959,7 @@ bool FbxModel::LoadBakedAndDiscardEx(const char* fbx_path, std::string& out_erro
     if (!LoadBaked(fbx_path)) {
         if (!last_error_.empty()) {
             out_error = last_error_;
-        }
-        else {
+        } else {
             out_error = "LoadBaked failed";
         }
         return false;

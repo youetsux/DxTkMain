@@ -168,19 +168,19 @@ namespace
         }
         if (fps <= 0.0) fps = 30.0;
 
-        const BakedAnimClip* baked_clip = md.pFbx ? md.pFbx->GetBakedAnimClip() : nullptr;
-        if (baked_clip && baked_clip->sample_rate > 0.0f)
-        {
-            fps = (double)baked_clip->sample_rate;
-        }
+		const BakedAnimClip* baked_clip = md.pFbx ? md.pFbx->GetBakedAnimClip() : nullptr;
+		if (baked_clip && baked_clip->sample_rate > 0.0f)
+		{
+			fps = (double)baked_clip->sample_rate;
+		}
 
-        const double baseTimeSec = anim ? anim->time_begin : (baked_clip ? (double)baked_clip->start_time : 0.0);
+		const double baseTimeSec = anim ? anim->time_begin : (baked_clip ? (double)baked_clip->start_time : 0.0);
 
         bool hasAnimSetting =
             (md.anim.endFrame > md.anim.startFrame) &&
             (md.anim.speed != 0.0f);
 
-        if (anim && hasAnimSetting)
+		if (anim && hasAnimSetting)
         {
             const float prevFrame = md.anim.currentFrame;
 
@@ -244,7 +244,7 @@ namespace
 
             if (md.pFbx) md.pFbx->UpdateSkeletonAtTime(anim, md.anim.timeSec);
         }
-        else if (anim)
+		else if (anim)
         {
             md.anim.currentFrame = (float)md.anim.startFrame;
 
@@ -253,81 +253,81 @@ namespace
 
             if (md.pFbx) md.pFbx->UpdateSkeletonAtTime(anim, md.anim.timeSec);
         }
-        else if (baked_clip && hasAnimSetting)
-        {
-            const float prevFrame = md.anim.currentFrame;
+		else if (baked_clip && hasAnimSetting)
+		{
+			const float prevFrame = md.anim.currentFrame;
 
-            if (!md.anim.paused)
-            {
-                const double dtSec = EngineTime::DeltaTime();
-                const double deltaFrames = dtSec * fps * double(md.anim.speed);
-                md.anim.currentFrame += (float)deltaFrames;
+			if (!md.anim.paused)
+			{
+				const double dtSec = EngineTime::DeltaTime();
+				const double deltaFrames = dtSec * fps * double(md.anim.speed);
+				md.anim.currentFrame += (float)deltaFrames;
 
-                if (md.anim.loop)
-                {
-                    float rangeLen = (float)(md.anim.endFrame - md.anim.startFrame + 1);
-                    if (rangeLen <= 0.0f) rangeLen = 1.0f;
-                    while (md.anim.currentFrame > md.anim.endFrame)   md.anim.currentFrame -= rangeLen;
-                    while (md.anim.currentFrame < md.anim.startFrame) md.anim.currentFrame += rangeLen;
-                }
-                else
-                {
-                    if (md.anim.speed >= 0.0f)
-                    {
-                        if (md.anim.currentFrame > md.anim.endFrame)
-                        {
-                            md.anim.currentFrame = (float)md.anim.endFrame;
-                            md.anim.paused = true;
-                        }
-                        if (md.anim.currentFrame < md.anim.startFrame)
-                        {
-                            md.anim.currentFrame = (float)md.anim.startFrame;
-                        }
-                    }
-                    else
-                    {
-                        if (md.anim.currentFrame < md.anim.startFrame)
-                        {
-                            md.anim.currentFrame = (float)md.anim.startFrame;
-                            md.anim.paused = true;
-                        }
-                        if (md.anim.currentFrame > md.anim.endFrame)
-                        {
-                            md.anim.currentFrame = (float)md.anim.endFrame;
-                        }
-                    }
-                }
-            }
+				if (md.anim.loop)
+				{
+					float rangeLen = (float)(md.anim.endFrame - md.anim.startFrame + 1);
+					if (rangeLen <= 0.0f) rangeLen = 1.0f;
+					while (md.anim.currentFrame > md.anim.endFrame)   md.anim.currentFrame -= rangeLen;
+					while (md.anim.currentFrame < md.anim.startFrame) md.anim.currentFrame += rangeLen;
+				}
+				else
+				{
+					if (md.anim.speed >= 0.0f)
+					{
+						if (md.anim.currentFrame > md.anim.endFrame)
+						{
+							md.anim.currentFrame = (float)md.anim.endFrame;
+							md.anim.paused = true;
+						}
+						if (md.anim.currentFrame < md.anim.startFrame)
+						{
+							md.anim.currentFrame = (float)md.anim.startFrame;
+						}
+					}
+					else
+					{
+						if (md.anim.currentFrame < md.anim.startFrame)
+						{
+							md.anim.currentFrame = (float)md.anim.startFrame;
+							md.anim.paused = true;
+						}
+						if (md.anim.currentFrame > md.anim.endFrame)
+						{
+							md.anim.currentFrame = (float)md.anim.endFrame;
+						}
+					}
+				}
+			}
 
-            bool needRecalc = (md.anim.currentFrame != prevFrame);
-            if (!needRecalc && md.anim.timeSec == 0.0)
-            {
-                needRecalc = true;
-            }
+			bool needRecalc = (md.anim.currentFrame != prevFrame);
+			if (!needRecalc && md.anim.timeSec == 0.0)
+			{
+				needRecalc = true;
+			}
 
-            if (needRecalc)
-            {
-                const double secondsPerFrame = 1.0 / fps;
-                md.anim.timeSec = double(baked_clip->start_time) + double(md.anim.currentFrame) * secondsPerFrame;
-            }
+			if (needRecalc)
+			{
+				const double secondsPerFrame = 1.0 / fps;
+				md.anim.timeSec = double(baked_clip->start_time) + double(md.anim.currentFrame) * secondsPerFrame;
+			}
 
 #if BAKED_TIME_DEBUG
-            static int s_dbgCount = 0;
-            if ((s_dbgCount++ % 60) == 0)
-            {
-                char buf[256];
-                sprintf_s(buf, "[BakedAnim] timeSec=%.6f frame=%.3f fps=%.2f start=%.6f end=%.6f\n",
-                    (double)md.anim.timeSec,
-                    (double)md.anim.currentFrame,
-                    (double)fps,
-                    (double)baked_clip->start_time,
-                    (double)baked_clip->end_time);
-                OutputDebugStringA(buf);
-            }
+			static int s_dbgCount = 0;
+			if ((s_dbgCount++ % 60) == 0)
+			{
+				char buf[256];
+				sprintf_s(buf, "[BakedAnim] timeSec=%.6f frame=%.3f fps=%.2f start=%.6f end=%.6f\n",
+					(double)md.anim.timeSec,
+					(double)md.anim.currentFrame,
+					(double)fps,
+					(double)baked_clip->start_time,
+					(double)baked_clip->end_time);
+				OutputDebugStringA(buf);
+			}
 #endif
 
-            if (md.pFbx) md.pFbx->UpdateSkeletonAtTime(md.anim.timeSec);
-        }
+			if (md.pFbx) md.pFbx->UpdateSkeletonAtTime(md.anim.timeSec);
+		}
         else
         {
             if (md.pFbx) md.pFbx->UpdateSkeletonAtTime(0.0);
@@ -399,19 +399,19 @@ namespace Model
         else
         {
             FbxModel* pNew = new FbxModel();
-            {
-                std::string err;
-                // StepE: import 時に baked を生成し、scene を破棄してランタイムは baked で評価する。
-                // 失敗時は従来ロードにフォールバックし、退行を避ける。
-                if (!pNew->LoadBakedAndDiscardEx(fileName.c_str(), err, false))
-                {
-                    if (!pNew->Load(fileName.c_str()))
-                    {
-                        delete pNew;
-                        return -1;
-                    }
-                }
-            }
+			{
+				std::string err;
+				// StepE: import 時に baked を生成し、scene を破棄してランタイムは baked で評価する。
+				// 失敗時は従来ロードにフォールバックし、退行を避ける。
+				if (!pNew->LoadBakedAndDiscardEx(fileName.c_str(), err, false))
+				{
+					if (!pNew->Load(fileName.c_str()))
+					{
+						delete pNew;
+						return -1;
+					}
+				}
+			}
 
             g_modelCache[fileName] = pNew;
             g_refCount[pNew] = 1;

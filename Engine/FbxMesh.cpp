@@ -1474,50 +1474,9 @@ void FbxMesh::UpdateSkinningIfNeeded(
 	// Choose the mode that yields matrices closer to a rigid transform (scale ~ 1, orthogonal axes).
 	if (has_skinning_ && !skin_mode_decided_)
 	{
-		use_geom_bind_for_skinning_ = false;
-		float score_invbind = 0.0f;
-		float score_geombind = 0.0f;
-		const size_t n = std::min<size_t>(skeleton.Bones().size(), 8);
-		for (size_t i = 0; i < n; ++i)
-		{
-			DirectX::XMMATRIX W = DirectX::XMLoadFloat4x4(&skeleton.CurrWorld()[i]);
-			if (!use_geom_bind_for_skinning_) {
-				// Align node-evaluated bone world with cluster bind_to_world when they differ.
-				const DirectX::XMMATRIX FIX = DirectX::XMLoadFloat4x4(&skeleton.Bones()[i].bind_fix_world);
-				W = DirectX::XMMatrixMultiply(FIX, W);
-			}
-			DirectX::XMMATRIX IB = DirectX::XMLoadFloat4x4(&skeleton.Bones()[i].inv_bind_world);
-			DirectX::XMMATRIX G2B = DirectX::XMLoadFloat4x4(&skeleton.Bones()[i].geom_bind_world);
-
-			auto score_matrix = [](const DirectX::XMMATRIX& M) -> float {
-				DirectX::XMFLOAT4X4 m;
-				DirectX::XMStoreFloat4x4(&m, M);
-				// Column vectors (treating matrix as transform with basis in columns)
-				auto len3 = [](float x, float y, float z) {
-					return std::sqrtf(x * x + y * y + z * z);
-					};
-				float c0x = m._11, c0y = m._21, c0z = m._31;
-				float c1x = m._12, c1y = m._22, c1z = m._32;
-				float c2x = m._13, c2y = m._23, c2z = m._33;
-				float l0 = len3(c0x, c0y, c0z);
-				float l1 = len3(c1x, c1y, c1z);
-				float l2 = len3(c2x, c2y, c2z);
-				float scale_dev = std::fabsf(l0 - 1.0f) + std::fabsf(l1 - 1.0f) + std::fabsf(l2 - 1.0f);
-				// Orthogonality penalty (dot products should be ~0)
-				float d01 = c0x * c1x + c0y * c1y + c0z * c1z;
-				float d02 = c0x * c2x + c0y * c2y + c0z * c2z;
-				float d12 = c1x * c2x + c1y * c2y + c1z * c2z;
-				float ortho = std::fabsf(d01) + std::fabsf(d02) + std::fabsf(d12);
-				return scale_dev + ortho;
-				};
-
-			score_invbind += score_matrix(DirectX::XMMatrixMultiply(IB, W));
-			score_geombind += score_matrix(DirectX::XMMatrixMultiply(W, G2B));
-		}
-
-		use_geom_bind_for_skinning_ = (score_geombind + 1e-6f) < score_invbind;
-		skin_mode_decided_ = true;
-		OutputDebugStringA(use_geom_bind_for_skinning_ ? "[SkinMode] using geom_bind_world\n" : "[SkinMode] using inv_bind_world\n");
+		// Skinning mode: ufbx provides geometry_to_bone per cluster, so we skin with (boneWorld * geometry_to_bone)...
+		use_geom_bind_for_skinning_ = true;
+		OutputDebugStringA("[SkinMode] using geom_bind_world\n");
 	}
 
 	// ボーン数に合わせてスキン行列配列を準備
@@ -1546,24 +1505,17 @@ void FbxMesh::UpdateSkinningIfNeeded(
 	// 各ボーンのスキン行列を作る
 	// bind pose では W == bind_world なので inv_bind_world * W == Identity となり、
 	// バインド頂点（bind_vertices_）がそのまま出力される。
-	for (size_t i = 0; i < skeleton.Bones().size(); ++i) {
-		DirectX::XMMATRIX W = DirectX::XMLoadFloat4x4(&skeleton.CurrWorld()[i]);
-		if (!use_geom_bind_for_skinning_) {
-			// Align node-evaluated bone world with cluster bind_to_world when they differ.
-			const DirectX::XMMATRIX FIX = DirectX::XMLoadFloat4x4(&skeleton.Bones()[i].bind_fix_world);
-			W = DirectX::XMMatrixMultiply(FIX, W);
-		}
-		// Most assets work with inv_bind_world * W.
-				// Some assets require bone_world * geometry_to_bone (geom_bind_world) due to non-identity mesh geometry transforms.
-		if (use_geom_bind_for_skinning_) {
-			DirectX::XMMATRIX G2B = DirectX::XMLoadFloat4x4(&skeleton.Bones()[i].geom_bind_world);
-			skin_mats[i] = DirectX::XMMatrixMultiply(W, G2B);
-		}
-		else {
-			DirectX::XMMATRIX IB = DirectX::XMLoadFloat4x4(&skeleton.Bones()[i].inv_bind_world);
-			skin_mats[i] = DirectX::XMMatrixMultiply(IB, W);
-		}
+	for (size_t i = 0; i < skeleton.Bones().size(); ++i)
+	{
+		// ufbx の推奨: スキニングは geometry_to_bone を用いて
+		//   skin = bone_curr_world * geometry_to_bone
+		const XMMATRIX W = XMLoadFloat4x4(&skeleton.CurrWorld()[i]);
+		const XMMATRIX G = XMLoadFloat4x4(&skeleton.Bones()[i].geom_bind_world);
+		skin_mats[i] = XMMatrixTranspose(W * G);
 	}
+
+	// (SkinMode) Always geometry_to_bone
+	OutputDebugStringA("[SkinMode] using geom_to_bone\n");
 
 	// CPU スキニング実行（bind -> skinned を更新）
 	ApplySkinCPU(skin_mats);

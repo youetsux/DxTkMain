@@ -17,20 +17,38 @@ struct ufbx_anim;
 // ------------------------------------------------------------
 struct BoneInfo
 {
-    const ufbx_node* node = nullptr; // このボーンに対応する ufbx のノード
-    int              parent = -1;    // 親ボーンのインデックス（なければ -1）
+    int element_id = -1;
+    int parent = -1;
 
-    // ufbx_node* は scene 破棄後に無効になる。
-    // baked runtime で参照できるように ID を保持しておく。
-    uint32_t         node_typed_id = 0xFFFFFFFFu;
-    uint32_t         element_id = 0xFFFFFFFFu;
+    // Source ufbx node pointer (valid while the owning ufbx_scene lives)
+    const ufbx_node* node = nullptr;
 
-    DirectX::XMFLOAT4X4 bind_world{};           // ボーンのバインド姿勢のワールド行列
-    DirectX::XMFLOAT4X4 node_bind_world{};      // ufbx ノードの bind 時 world（補正用）
-    DirectX::XMFLOAT4X4 bind_fix_world{};       // bind_world * inverse(node_bind_world)
-    DirectX::XMFLOAT4X4 inv_bind_world{};       // 上の逆行列
-    DirectX::XMFLOAT4X4 geom_bind_world{};      // ジオメトリ → ボーン の変換行列
-    DirectX::XMFLOAT4X4 inv_geom_bind_world{};  // その逆行列
+    // Unique typed id for the node (stable within the scene)
+    uint64_t node_typed_id = 0;
+
+    // Bind matrices (world space)
+    DirectX::XMFLOAT4X4 bind_world;           // cluster bind_to_world (fallback: node bind)
+    DirectX::XMFLOAT4X4 node_bind_world;      // node_to_world at import/bind (rest)
+    DirectX::XMFLOAT4X4 inv_bind_world;       // inverse(bind_world)
+
+    // Geometry bind (mesh geometry space -> bone space)
+    DirectX::XMFLOAT4X4 geom_bind_world;      // cluster geometry_to_bone (fallback: identity)
+    DirectX::XMFLOAT4X4 inv_geom_bind_world;  // inverse(geom_bind_world)
+
+    // Correction so that bind_world aligns with node_bind_world (identity if already aligned)
+    DirectX::XMFLOAT4X4 bind_fix_world;
+
+    BoneInfo()
+    {
+        using namespace DirectX;
+        const XMMATRIX I = XMMatrixIdentity();
+        XMStoreFloat4x4(&bind_world, I);
+        XMStoreFloat4x4(&node_bind_world, I);
+        XMStoreFloat4x4(&inv_bind_world, I);
+        XMStoreFloat4x4(&geom_bind_world, I);
+        XMStoreFloat4x4(&inv_geom_bind_world, I);
+        XMStoreFloat4x4(&bind_fix_world, I);
+    }
 };
 
 // ------------------------------------------------------------

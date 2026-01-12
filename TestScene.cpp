@@ -171,7 +171,7 @@ TestScene::~TestScene()
 
 void TestScene::Initialize()
 {
-    Camera::SetPosition({ 0.0f, 1.0f, -3.0f });
+    Camera::SetPosition({ 0.0f, 1.0f, -300.0f });
     Camera::SetTarget({ 0.0f, 1.0f, 0.0f });
 
     // 1体目

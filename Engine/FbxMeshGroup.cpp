@@ -1,6 +1,5 @@
 // FbxMeshGroup.cpp
 #include "FbxMeshGroup.h"
-#include "FbxMesh.h"
 
 void FbxMeshGroup::Clear()
 {

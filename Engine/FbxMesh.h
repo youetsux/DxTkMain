@@ -243,9 +243,9 @@ private:
     bool    skin_bones_remapped_ = false;
     bool    skin_mode_decided_ = false;
     bool    use_geom_bind_for_skinning_ = false;
-    // Remap/mode depend on which skeleton is used (avoid stale mapping when skeleton differs)
-    uintptr_t last_remap_skeleton_ptr_ = 0;
-    size_t    last_remap_bone_count_ = 0;
+	// Remap/mode depend on which skeleton is used (avoid stale mapping when skeleton differs)
+	uintptr_t last_remap_skeleton_ptr_ = 0;
+	size_t    last_remap_bone_count_ = 0;
 
     bool    force_checker_texture_ = false;
 };
