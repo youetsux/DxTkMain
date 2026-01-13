@@ -22,6 +22,54 @@
 
 using Microsoft::WRL::ComPtr;
 
+namespace
+{
+	// FbxMesh 側にメンバを増やさず「前回スキニングした骨姿勢」を覚えるためのキャッシュ。
+	// key: FbxMesh の this ポインタ, value: CurrWorld の簡易ハッシュ
+	static std::unordered_map<const FbxMesh*, uint64_t> g_lastSkinHash;
+
+	static void MixFNV1a64(uint64_t& h, uint32_t v)
+	{
+		h ^= (uint64_t)v;
+		h *= 1099511628211ull;
+	}
+
+	static uint64_t HashCurrWorldSample(const std::vector<DirectX::XMFLOAT4X4>& mats)
+	{
+		uint64_t h = 1469598103934665603ull;
+
+		const size_t n = mats.size();
+		MixFNV1a64(h, (uint32_t)n);
+
+		// 全部は重いので、先頭/中間/末尾から数個だけサンプリング
+		const size_t sample_count = 3;
+		size_t idxs[sample_count] = { 0, 0, 0 };
+		if (n > 0) {
+			idxs[0] = 0;
+			idxs[1] = n / 2;
+			idxs[2] = n - 1;
+		}
+
+		for (size_t si = 0; si < sample_count; ++si) {
+			if (n == 0) break;
+
+			size_t i = idxs[si];
+			if (i >= n) i = n - 1;
+
+			const DirectX::XMFLOAT4X4& M = mats[i];
+			const float* f = &M._11;
+
+			for (int k = 0; k < 16; ++k) {
+				uint32_t u = 0;
+				static_assert(sizeof(u) == sizeof(float), "size");
+				std::memcpy(&u, &f[k], sizeof(uint32_t));
+				MixFNV1a64(h, u);
+			}
+		}
+
+		return h;
+	}
+}
 
 namespace FbxMeshBuild
 {
@@ -491,7 +539,10 @@ namespace
 } // anonymous namespace
 
 FbxMesh::FbxMesh() = default;
-FbxMesh::~FbxMesh() = default;
+FbxMesh::~FbxMesh()
+{
+	g_lastSkinHash.erase(this);
+}
 
 //================================================================
 // FbxMesh::EmitCorner
@@ -950,7 +1001,16 @@ bool FbxMesh::CreateGpuBuffers()
 		desc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
 		desc.ByteWidth =
 			(UINT)(mesh_.vertices_.size() * sizeof(VertexPNT2));
-		desc.Usage = D3D11_USAGE_DEFAULT;
+
+		// スキニングあり: 毎フレーム更新するので DYNAMIC + WRITE
+		// スキニングなし: 変更しないので DEFAULT
+		if (has_skinning_) {
+			desc.Usage = D3D11_USAGE_DYNAMIC;
+			desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+		}
+		else {
+			desc.Usage = D3D11_USAGE_DEFAULT;
+		}
 
 		D3D11_SUBRESOURCE_DATA init;
 		std::memset(&init, 0, sizeof(init));
@@ -962,7 +1022,6 @@ bool FbxMesh::CreateGpuBuffers()
 			return false;
 		}
 	}
-
 	// インデックスバッファ（IB）作成
 	{
 		D3D11_BUFFER_DESC desc;
@@ -1165,6 +1224,16 @@ void FbxMesh::UpdateSkinningIfNeeded(
 	if (mesh_.influences_.empty()) return;
 	if (mesh_.bind_vertices_.empty()) return;
 
+	// ------------------------------------------------------------
+	// 骨姿勢が前回と同一なら、CPUスキニングも VB 更新もスキップする
+	// （FbxMesh にメンバ追加せず、cpp 側の static キャッシュで対応）
+	// ------------------------------------------------------------
+	const uint64_t cur_hash = HashCurrWorldSample(skeleton.CurrWorld());
+	auto it = g_lastSkinHash.find(this);
+	if (it != g_lastSkinHash.end() && it->second == cur_hash) {
+		return;
+	}
+
 	// ボーン数に合わせてスキン行列配列を準備
 	auto& skin_mats = skeleton.SkinMatrices();
 	skin_mats.resize(skeleton.Bones().size());
@@ -1179,10 +1248,36 @@ void FbxMesh::UpdateSkinningIfNeeded(
 	// CPU スキニング実行（bind -> skinned を更新）
 	ApplySkinCPU(skin_mats);
 
+	if (mesh_.skinned_vertices_.empty()) {
+		return;
+	}
+
 	// 結果を GPU の頂点バッファに反映
-	ctx->UpdateSubresource(
-		vb_.Get(), 0, nullptr,
-		&mesh_.skinned_vertices_[0], 0, 0);
+	// - VB が DYNAMIC の場合は Map(WRITE_DISCARD) で更新
+	// - そうでない場合は従来通り UpdateSubresource
+	D3D11_BUFFER_DESC vb_desc;
+	std::memset(&vb_desc, 0, sizeof(vb_desc));
+	vb_->GetDesc(&vb_desc);
+
+	if (vb_desc.Usage == D3D11_USAGE_DYNAMIC) {
+		D3D11_MAPPED_SUBRESOURCE mapped;
+		HRESULT hr = ctx->Map(vb_.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+		if (SUCCEEDED(hr)) {
+			const size_t bytes = mesh_.skinned_vertices_.size() * sizeof(VertexPNT2);
+			std::memcpy(mapped.pData, &mesh_.skinned_vertices_[0], bytes);
+			ctx->Unmap(vb_.Get(), 0);
+
+			// このフレームの骨姿勢を記録（次回のスキップ判定に使う）
+			g_lastSkinHash[this] = cur_hash;
+		}
+	}
+	else {
+		ctx->UpdateSubresource(
+			vb_.Get(), 0, nullptr,
+			&mesh_.skinned_vertices_[0], 0, 0);
+
+		g_lastSkinHash[this] = cur_hash;
+	}
 }
 
 //------------------------------------------------------------

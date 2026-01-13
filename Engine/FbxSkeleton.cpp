@@ -1,10 +1,16 @@
 ﻿#include "FbxSkeleton.h"
+
 #include "ufbx.h"
 #include "UfbxUtil.h"
-#include "Gfx.h"        // DrawDebug �実装時に使う想定（今は未使用）
+#include "Gfx.h"
+
+#include <d3d11.h>
+#include <wrl/client.h>
 #include <Effects.h>
 
 #include <unordered_map>
+#include <vector>
+#include <cstring>
 
 //------------------------------------------------------------
 // 内部ヘルパ（匿名名前空間）
@@ -12,20 +18,16 @@
 namespace
 {
     // ボーン登録ヘルパ
-    // ・ufbx_node を SkeletonData に追加し、そのインデックスを返す
-    // ・すでに登録されている場合は既存のインデックスを返す
     int AddBoneInternal(
         const ufbx_node* node,
         SkeletonData& skeleton,
         std::unordered_map<const ufbx_node*, int>& index_of)
     {
-        // すでに登録済みかチェック
         auto it = index_of.find(node);
         if (it != index_of.end()) {
             return it->second;
         }
 
-        // 新しいボーンとして追加
         int idx = static_cast<int>(skeleton.bones_.size());
         index_of.insert(std::make_pair(node, idx));
 
@@ -35,20 +37,123 @@ namespace
         return idx;
     }
 
+    // ------------------------------------------------------------
+    // DrawDebug 用の静的キャッシュ（FbxSkeleton に押し付けない）
+    // ------------------------------------------------------------
+    struct DebugVC
+    {
+        DirectX::XMFLOAT3 pos;
+        DirectX::XMFLOAT4 col;
+    };
 
-    // 旧デバッグ描画
-    std::vector<BoneInfo>        m_bones;     // 旧の基本情報
-    std::vector<DirectX::XMFLOAT4X4> m_currWorld; // W_i(t)
+    std::unique_ptr<DirectX::BasicEffect>               g_debugFx;
+    Microsoft::WRL::ComPtr<ID3D11InputLayout>           g_debugLayout;
+    Microsoft::WRL::ComPtr<ID3D11Buffer>                g_boneVB;
+    size_t                                              g_boneVBVerts = 0; // 頂点数
+    Microsoft::WRL::ComPtr<ID3D11DepthStencilState>     g_depthOff;
 
-    std::unique_ptr<DirectX::DX11::BasicEffect> m_debugFx;
-    Microsoft::WRL::ComPtr<ID3D11InputLayout>   m_debugLayout;
-    Microsoft::WRL::ComPtr<ID3D11Buffer>        m_boneVB;
-    size_t m_boneVBSize = 0;
+    DirectX::XMFLOAT3 GetBonePosition(const DirectX::XMFLOAT4X4& M)
+    {
+        DirectX::XMFLOAT3 p;
+        p.x = M._41;
+        p.y = M._42;
+        p.z = M._43;
+        return p;
+    }
 
-    // 既存の AddBoneInternal や m_debugFx, m_boneVBSize などに続けて…
-    Microsoft::WRL::ComPtr<ID3D11DepthStencilState> g_skelDepthState; // Z test on / Z write off
+    DirectX::XMFLOAT3 TransformPoint(
+        const DirectX::XMFLOAT4X4& M,
+        const DirectX::XMFLOAT3& v)
+    {
+        using namespace DirectX;
+        XMMATRIX mat = XMLoadFloat4x4(&M);
+        XMVECTOR p = XMVector3Transform(XMLoadFloat3(&v), mat);
+        XMFLOAT3 out;
+        XMStoreFloat3(&out, p);
+        return out;
+    }
+
+    void EnsureDebugResources(ID3D11DeviceContext* ctx)
+    {
+        if (!ctx) return;
+
+        if (!g_debugFx)
+        {
+            ID3D11Device* dev = nullptr;
+            ctx->GetDevice(&dev);
+            if (!dev) return;
+
+            g_debugFx = std::make_unique<DirectX::BasicEffect>(dev);
+            g_debugFx->SetVertexColorEnabled(true);
+            g_debugFx->SetLightingEnabled(false);
+
+            const void* bc = nullptr;
+            size_t      sz = 0;
+            g_debugFx->GetVertexShaderBytecode(&bc, &sz);
+
+            D3D11_INPUT_ELEMENT_DESC desc[] =
+            {
+                { "SV_POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT,
+                  0, 0,  D3D11_INPUT_PER_VERTEX_DATA, 0 },
+                { "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT,
+                  0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+            };
+
+            dev->CreateInputLayout(desc, 2, bc, sz, g_debugLayout.GetAddressOf());
+
+            // 初期 VB（必要なら後で拡張）
+            D3D11_BUFFER_DESC bd{};
+            bd.ByteWidth = sizeof(DebugVC) * 4096;
+            bd.Usage = D3D11_USAGE_DYNAMIC;
+            bd.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+            bd.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+
+            dev->CreateBuffer(&bd, nullptr, g_boneVB.GetAddressOf());
+            g_boneVBVerts = bd.ByteWidth / sizeof(DebugVC);
+
+            dev->Release();
+        }
+
+        if (!g_depthOff)
+        {
+            ID3D11Device* dev = nullptr;
+            ctx->GetDevice(&dev);
+            if (!dev) return;
+
+            D3D11_DEPTH_STENCIL_DESC ds{};
+            ds.DepthEnable = FALSE;
+            ds.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
+            ds.DepthFunc = D3D11_COMPARISON_ALWAYS;
+            ds.StencilEnable = FALSE;
+
+            dev->CreateDepthStencilState(&ds, g_depthOff.GetAddressOf());
+            dev->Release();
+        }
+    }
+
+    void EnsureVBSize(ID3D11DeviceContext* ctx, size_t requiredVerts)
+    {
+        if (!ctx) return;
+        if (g_boneVB && g_boneVBVerts >= requiredVerts) return;
+
+        g_boneVB.Reset();
+
+        ID3D11Device* dev = nullptr;
+        ctx->GetDevice(&dev);
+        if (!dev) return;
+
+        D3D11_BUFFER_DESC bd{};
+        bd.ByteWidth = static_cast<UINT>(requiredVerts * sizeof(DebugVC));
+        bd.Usage = D3D11_USAGE_DYNAMIC;
+        bd.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+        bd.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+
+        dev->CreateBuffer(&bd, nullptr, g_boneVB.GetAddressOf());
+        g_boneVBVerts = requiredVerts;
+
+        dev->Release();
+    }
 }
-
 
 const std::vector<BoneInfo>& FbxSkeleton::Bones() const
 {
@@ -82,7 +187,6 @@ std::vector<DirectX::XMMATRIX>& FbxSkeleton::SkinMatrices()
 
 bool FbxSkeleton::BuildFromScene(const ufbx_scene* scene)
 {
-    // いったん全部クリア
     data_.bones_.clear();
     data_.curr_world_.clear();
     data_.bone_index_of_.clear();
@@ -93,55 +197,38 @@ bool FbxSkeleton::BuildFromScene(const ufbx_scene* scene)
         return false;
     }
 
-    // ufbx_node* → ボーンインデックス の一時マップ
     std::unordered_map<const ufbx_node*, int> index_of;
 
-    // 全ノードをループ
     for (size_t ni = 0; ni < scene->nodes.count; ++ni) {
         const ufbx_node* node = scene->nodes.data[ni];
         const ufbx_mesh* mesh = node->mesh;
-        if (!mesh) continue; // メッシュを持たないノードはスキップ
+        if (!mesh) continue;
 
-        // メッシュについているスキンデフォーマを全て見る
         for (size_t si = 0; si < mesh->skin_deformers.count; ++si) {
             const ufbx_skin_deformer* skin = mesh->skin_deformers.data[si];
 
-            // 各クラスター（ボーン支配頂点群）の情報を見る
             for (size_t ci = 0; ci < skin->clusters.count; ++ci) {
                 const ufbx_skin_cluster* cl = skin->clusters.data[ci];
                 if (!cl->bone_node) continue;
 
-                // このクラスターのボーンを SkeletonData に登録
-                int bi = AddBoneInternal(
-                    cl->bone_node, data_, index_of);
+                int bi = AddBoneInternal(cl->bone_node, data_, index_of);
 
-                // ボーン側のバインド姿勢（ボーンのワールド行列）
-                data_.bones_[bi].bind_world =
-                    UfbxUtil::ToXMMatrix(cl->bind_to_world);
+                data_.bones_[bi].bind_world = UfbxUtil::ToXMMatrix(cl->bind_to_world);
 
-                // バインド姿勢の逆行列も作っておく
                 {
-                    DirectX::XMMATRIX B =
-                        DirectX::XMLoadFloat4x4(&data_.bones_[bi].bind_world);
+                    DirectX::XMMATRIX B = DirectX::XMLoadFloat4x4(&data_.bones_[bi].bind_world);
                     DirectX::XMMATRIX B_inv = DirectX::XMMatrixInverse(nullptr, B);
-                    DirectX::XMStoreFloat4x4(
-                        &data_.bones_[bi].inv_bind_world, B_inv);
+                    DirectX::XMStoreFloat4x4(&data_.bones_[bi].inv_bind_world, B_inv);
                 }
 
-                // ジオメトリ → ボーン の変換行列
-                data_.bones_[bi].geom_bind_world =
-                    UfbxUtil::ToXMMatrix(cl->geometry_to_bone);
+                data_.bones_[bi].geom_bind_world = UfbxUtil::ToXMMatrix(cl->geometry_to_bone);
 
-                // その逆行列
                 {
-                    DirectX::XMMATRIX G =
-                        DirectX::XMLoadFloat4x4(&data_.bones_[bi].geom_bind_world);
+                    DirectX::XMMATRIX G = DirectX::XMLoadFloat4x4(&data_.bones_[bi].geom_bind_world);
                     DirectX::XMMATRIX G_inv = DirectX::XMMatrixInverse(nullptr, G);
-                    DirectX::XMStoreFloat4x4(
-                        &data_.bones_[bi].inv_geom_bind_world, G_inv);
+                    DirectX::XMStoreFloat4x4(&data_.bones_[bi].inv_geom_bind_world, G_inv);
                 }
 
-                // 親ボーンとの関係（親があればインデックスを調べてセット）
                 if (cl->bone_node->parent) {
                     auto itp = index_of.find(cl->bone_node->parent);
                     if (itp != index_of.end()) {
@@ -152,18 +239,14 @@ bool FbxSkeleton::BuildFromScene(const ufbx_scene* scene)
         }
     }
 
-    // ボーンが 1 本も無ければ、そのまま true（メッシュだけのモデル対応）
     if (data_.bones_.empty()) {
         return true;
     }
 
-    // 現在姿勢・スキン行列用配列をボーン数に合わせて確保
     data_.curr_world_.resize(data_.bones_.size());
     data_.skin_mats_.resize(data_.bones_.size());
 
-    // ufbx_node* → uint16_t ボーン番号 のマップを作る
     for (size_t i = 0; i < data_.bones_.size(); ++i) {
-        // 初期姿勢はバインド姿勢
         data_.curr_world_[i] = data_.bones_[i].bind_world;
 
         if (data_.bones_[i].node && i < 0x10000) {
@@ -180,21 +263,12 @@ void FbxSkeleton::UpdateAtTime(const ufbx_scene* scene, const ufbx_anim* anim, d
     if (!scene || !anim) return;
     if (data_.bones_.empty()) return;
 
-    // t をアニメーション時間の範囲にクランプ
     double t = t_sec;
     if (anim->time_end > anim->time_begin)
     {
         if (t < anim->time_begin) t = anim->time_begin;
         if (t > anim->time_end)   t = anim->time_end;
     }
-
-    // ------------------------------------------------------------
-    // 単純ベイク再生（完全版）
-    // ・毎フレーム ufbx_evaluate_scene() はしない
-    // ・ufbx_evaluate_transform() も使わない
-    // ・ufbx_bake_anim() で作った baked のキー列から TRS を補間して行列を作る
-    // ・キーが無い成分は node->local_transform（レスト姿勢）を使う
-    // ------------------------------------------------------------
 
     struct BakeCache
     {
@@ -204,7 +278,6 @@ void FbxSkeleton::UpdateAtTime(const ufbx_scene* scene, const ufbx_anim* anim, d
     };
 
     static std::unordered_map<const FbxSkeleton*, BakeCache> s_cache;
-
     BakeCache& cache = s_cache[this];
 
     if (!cache.baked || cache.anim != anim)
@@ -222,7 +295,6 @@ void FbxSkeleton::UpdateAtTime(const ufbx_scene* scene, const ufbx_anim* anim, d
         cache.baked = ufbx_bake_anim(scene, anim, nullptr, &error);
         if (!cache.baked)
         {
-            // ベイクに失敗した場合：今回は「単純ベイク」方針のため、何も更新せずに戻る
             return;
         }
 
@@ -307,7 +379,6 @@ void FbxSkeleton::UpdateAtTime(const ufbx_scene* scene, const ufbx_anim* anim, d
             return out;
         };
 
-    // ワールド合成：Parent * Local（あなたの実装規約に合わせる）
     for (size_t i = 0; i < bone_count; ++i)
     {
         const BoneInfo& bone = data_.bones_[i];
@@ -317,17 +388,12 @@ void FbxSkeleton::UpdateAtTime(const ufbx_scene* scene, const ufbx_anim* anim, d
             continue;
         }
 
-        // レスト姿勢（デフォルト値）
         ufbx_transform xf = bone.node->local_transform;
 
-        // ベイク済みキーで上書き
-        std::unordered_map<uint32_t, const ufbx_baked_node*>::const_iterator it =
-            cache.node_by_typed_id.find(bone.node->typed_id);
-
+        auto it = cache.node_by_typed_id.find(bone.node->typed_id);
         if (it != cache.node_by_typed_id.end())
         {
             const ufbx_baked_node* bn = it->second;
-
             xf.translation = eval_vec3(bn->translation_keys, t, xf.translation);
             xf.rotation = eval_quat(bn->rotation_keys, t, xf.rotation);
             xf.scale = eval_vec3(bn->scale_keys, t, xf.scale);
@@ -342,45 +408,12 @@ void FbxSkeleton::UpdateAtTime(const ufbx_scene* scene, const ufbx_anim* anim, d
         {
             const DirectX::XMFLOAT4X4& parentWorld = data_.curr_world_[static_cast<size_t>(bone.parent)];
             const DirectX::XMMATRIX PW = DirectX::XMLoadFloat4x4(&parentWorld);
-            W = L*PW;
+            W = L * PW; // ※元コードの規約を維持
         }
 
         DirectX::XMStoreFloat4x4(&data_.curr_world_[i], W);
     }
 }
-
-
-
-
-namespace {
-    // ------------------------------------------------------------
-    // 旧の位置/変換ヘルパ（DrawSkeleton で使う）
-    // ------------------------------------------------------------
-    DirectX::XMFLOAT3 GetBonePosition(const DirectX::XMFLOAT4X4& M)
-    {
-        // 行列の第4行の xyz が平行移動成分
-        DirectX::XMFLOAT3 p;
-        p.x = M._41;
-        p.y = M._42;
-        p.z = M._43;
-        return p;
-    }
-    // 任意の点 v を行列 M で変換
-    DirectX::XMFLOAT3 TransformPoint(
-        const DirectX::XMFLOAT4X4& M,
-        const DirectX::XMFLOAT3& v)
-    {
-        using namespace DirectX;
-
-        XMMATRIX mat = XMLoadFloat4x4(&M);
-        XMVECTOR p = XMVector3Transform(XMLoadFloat3(&v), mat);
-        XMFLOAT3 out;
-        XMStoreFloat3(&out, p);
-        return out;
-    }
-
-}
-
 
 void FbxSkeleton::DrawDebug(
     const DirectX::XMMATRIX& world,
@@ -389,53 +422,12 @@ void FbxSkeleton::DrawDebug(
 {
     using namespace DirectX;
 
-    struct DebugVC
-    {
-        XMFLOAT3 pos;
-        XMFLOAT4 col;
-    };
-
     ID3D11DeviceContext* ctx = Gfx::Ctx();
     if (!ctx) return;
     if (data_.bones_.empty()) return;
 
-    // ---------- BasicEffect / VB 初期化 ----------
-    if (!m_debugFx)
-    {
-        ID3D11Device* dev = nullptr;
-        ctx->GetDevice(&dev);
-        if (!dev) return;
+    EnsureDebugResources(ctx);
 
-        m_debugFx = std::make_unique<BasicEffect>(dev);
-        m_debugFx->SetVertexColorEnabled(true);
-        m_debugFx->SetLightingEnabled(false);
-
-        const void* bc = nullptr;
-        size_t      sz = 0;
-        m_debugFx->GetVertexShaderBytecode(&bc, &sz);
-
-        D3D11_INPUT_ELEMENT_DESC desc[] =
-        {
-            { "SV_POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT,
-              0, 0,  D3D11_INPUT_PER_VERTEX_DATA, 0 },
-            { "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT,
-              0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-        };
-        dev->CreateInputLayout(desc, 2, bc, sz,
-            m_debugLayout.GetAddressOf());
-
-        D3D11_BUFFER_DESC bd{};
-        bd.ByteWidth = sizeof(DebugVC) * 4096;
-        bd.Usage = D3D11_USAGE_DYNAMIC;
-        bd.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-        bd.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
-        dev->CreateBuffer(&bd, nullptr, m_boneVB.GetAddressOf());
-        m_boneVBSize = bd.ByteWidth / sizeof(DebugVC);
-
-        dev->Release();
-    }
-
-    // ---------- ライン頂点を組み立て ----------
     std::vector<DebugVC> lines;
     lines.reserve(data_.bones_.size() * 8);
 
@@ -454,7 +446,7 @@ void FbxSkeleton::DrawDebug(
 
         if (parent >= 0)
         {
-            XMFLOAT3 p0 = GetBonePosition(data_.curr_world_[parent]);
+            XMFLOAT3 p0 = GetBonePosition(data_.curr_world_[static_cast<size_t>(parent)]);
             XMFLOAT3 p1 = GetBonePosition(Wi);
             lines.push_back({ p0, col_bone });
             lines.push_back({ p1, col_bone });
@@ -472,76 +464,35 @@ void FbxSkeleton::DrawDebug(
 
     if (lines.empty()) return;
 
-    // ---------- VB 再確保 ----------
-    if (m_boneVBSize < lines.size())
+    EnsureVBSize(ctx, lines.size());
+
+    D3D11_MAPPED_SUBRESOURCE mapped{};
+    if (SUCCEEDED(ctx->Map(g_boneVB.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
     {
-        m_boneVB.Reset();
-
-        ID3D11Device* dev = nullptr;
-        ctx->GetDevice(&dev);
-        if (!dev) return;
-
-        D3D11_BUFFER_DESC bd{};
-        bd.ByteWidth = (UINT)(lines.size() * sizeof(DebugVC));
-        bd.Usage = D3D11_USAGE_DYNAMIC;
-        bd.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-        bd.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
-
-        dev->CreateBuffer(&bd, nullptr, m_boneVB.GetAddressOf());
-        m_boneVBSize = lines.size();
-
-        dev->Release();
+        std::memcpy(mapped.pData, lines.data(), lines.size() * sizeof(DebugVC));
+        ctx->Unmap(g_boneVB.Get(), 0);
     }
 
-    // ---------- VB 書き込み ----------
-    D3D11_MAPPED_SUBRESOURCE mapped;
-    if (SUCCEEDED(ctx->Map(
-        m_boneVB.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
-    {
-        std::memcpy(mapped.pData,
-            lines.data(), lines.size() * sizeof(DebugVC));
-        ctx->Unmap(m_boneVB.Get(), 0);
-    }
-
-    // ---------- DepthState: Z 完全 OFF で常時描き！ ----------
-    static Microsoft::WRL::ComPtr<ID3D11DepthStencilState> s_depthOff;
-
-    if (!s_depthOff)
-    {
-        ID3D11Device* dev = nullptr;
-        ctx->GetDevice(&dev);
-        if (!dev) return;
-
-        D3D11_DEPTH_STENCIL_DESC ds{};
-        ds.DepthEnable = FALSE;                         // ★ Zテストしない
-        ds.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;   // 書き込みなし
-        ds.StencilEnable = FALSE;
-
-        dev->CreateDepthStencilState(&ds, s_depthOff.GetAddressOf());
-        dev->Release();
-    }
-
+    // Depth state 保存→Z完全OFF→描画→復帰
     Microsoft::WRL::ComPtr<ID3D11DepthStencilState> oldDSS;
     UINT oldRef = 0;
     ctx->OMGetDepthStencilState(oldDSS.GetAddressOf(), &oldRef);
+    ctx->OMSetDepthStencilState(g_depthOff.Get(), 0);
 
-    ctx->OMSetDepthStencilState(s_depthOff.Get(), 0);
-
-    // ---------- 描画 ----------
     UINT stride = sizeof(DebugVC);
     UINT offset = 0;
 
-    ctx->IASetInputLayout(m_debugLayout.Get());
-    ctx->IASetVertexBuffers(0, 1, m_boneVB.GetAddressOf(), &stride, &offset);
+    ctx->IASetInputLayout(g_debugLayout.Get());
+    ID3D11Buffer* vb = g_boneVB.Get();
+    ctx->IASetVertexBuffers(0, 1, &vb, &stride, &offset);
     ctx->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_LINELIST);
 
-    m_debugFx->SetWorld(world);
-    m_debugFx->SetView(view);
-    m_debugFx->SetProjection(proj);
+    g_debugFx->SetWorld(world);
+    g_debugFx->SetView(view);
+    g_debugFx->SetProjection(proj);
+    g_debugFx->Apply(ctx);
 
-    m_debugFx->Apply(ctx);
-    ctx->Draw((UINT)lines.size(), 0);
+    ctx->Draw(static_cast<UINT>(lines.size()), 0);
 
-    // depth state 戻す
     ctx->OMSetDepthStencilState(oldDSS.Get(), oldRef);
 }
