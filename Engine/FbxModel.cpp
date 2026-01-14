@@ -223,28 +223,10 @@ void FbxModel::MeasureBoundsFromScene(const ufbx_scene* scene)
     if (sz > maxe) maxe = sz;
     measured_max_extent_ = maxe;
 
-    // up軸に沿った「高さ」を保持
-    float height = sy;
-    switch (scene->settings.axes.up)
-    {
-    case UFBX_COORDINATE_AXIS_POSITIVE_X:
-    case UFBX_COORDINATE_AXIS_NEGATIVE_X:
-        height = sx;
-        break;
-    case UFBX_COORDINATE_AXIS_POSITIVE_Y:
-    case UFBX_COORDINATE_AXIS_NEGATIVE_Y:
-        height = sy;
-        break;
-    case UFBX_COORDINATE_AXIS_POSITIVE_Z:
-    case UFBX_COORDINATE_AXIS_NEGATIVE_Z:
-        height = sz;
-        break;
-    default:
-        height = maxe;
-        break;
-    }
-
-    measured_height_ = height;
+    // target_axes = left_handed_y_up でロードしているため、
+ // geometry_to_world の結果は常に Y-up 空間。
+ // scene->settings.axes は「元FBXの軸」なので使わない。
+    measured_height_ = sy;
     measured_bounds_valid_ = true;
 }
 

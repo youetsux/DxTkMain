@@ -61,7 +61,6 @@ void TestScene::Initialize()
 
     // モデル（必要に応じてパス・正規化高さを調整）
     actor3_->AddComponent(mc3);
-    mc3->SetRootScale(0.1f);
     //mc3->SetAnimStack(1);
     //mc3->SetAnimRange(0, 229, 1.0f);
     //mc3->SetLoop(true);
