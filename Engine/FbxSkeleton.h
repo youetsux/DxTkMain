@@ -60,6 +60,15 @@ public:
         const DirectX::XMMATRIX& view,
         const DirectX::XMMATRIX& proj);
 
+    // ------------------------------------------------------------
+    // Bake済み姿勢の適用 / scene 破棄用
+    // ------------------------------------------------------------
+    // world 行列配列（bone_count 要素）をそのまま現在姿勢に適用する
+    void ApplyBakedPoseWorld(const DirectX::XMFLOAT4X4* worlds, size_t bone_count);
+    // ufbx_scene 由来ポインタを切り離す（scene 破棄前に必ず呼ぶ）
+    void DetachFromScene();
+
+
 private:
     SkeletonData data_;
 };

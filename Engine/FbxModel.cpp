@@ -129,8 +129,11 @@ bool FbxModel::LoadScene(const char* fbx_path)
     opts.target_axes = ufbx_axes_left_handed_y_up;
     opts.handedness_conversion_axis = UFBX_MIRROR_AXIS_Z;
 
+
+    // Units: normalize to meters so all measurements are in meters.
+    opts.target_unit_meters = 1.0;
     ufbx_scene* raw_scene = ufbx_load_file(fbx_path, &opts, &err);
-    
+
     if (!raw_scene) {
         return false;
     }
@@ -138,6 +141,113 @@ bool FbxModel::LoadScene(const char* fbx_path)
     scene_.reset(raw_scene);
     return true;
 }
+//============================================================
+// MeasureBoundsFromScene
+//  scene を保持しない運用でも targetHeight 正規化に必要な実寸を参照できるように、
+//  ロード直後（scene が生きている間）に geometry_to_world を使ってメッシュ頂点をサンプルし AABB を作る
+//============================================================
+void FbxModel::MeasureBoundsFromScene(const ufbx_scene* scene)
+{
+    measured_height_ = 0.0f;
+    measured_max_extent_ = 0.0f;
+    measured_bounds_valid_ = false;
+
+    if (!scene || !scene->root_node) return;
+
+    float minX = 0.0f, minY = 0.0f, minZ = 0.0f;
+    float maxX = 0.0f, maxY = 0.0f, maxZ = 0.0f;
+    bool first = true;
+
+    std::vector<const ufbx_node*> stack;
+    stack.reserve(256);
+    stack.push_back(scene->root_node);
+
+    while (!stack.empty())
+    {
+        const ufbx_node* node = stack.back();
+        stack.pop_back();
+        if (!node) continue;
+
+        const size_t cc = node->children.count;
+        for (size_t i = 0; i < cc; ++i)
+        {
+            const ufbx_node* c = node->children.data[i];
+            if (c) stack.push_back(c);
+        }
+
+        if (!node->mesh) continue;
+        const ufbx_mesh* m = node->mesh;
+        if (!m->vertex_position.exists) continue;
+
+        const size_t vcount = m->vertex_position.values.count;
+        if (vcount == 0) continue;
+
+        const size_t MAX_SAMPLE = 20000;
+        size_t step = 1;
+        if (vcount > MAX_SAMPLE) step = vcount / MAX_SAMPLE;
+
+        for (size_t vi = 0; vi < vcount; vi += step)
+        {
+            const ufbx_vec3 p = m->vertex_position.values.data[vi];
+            const ufbx_vec3 wp = ufbx_transform_position(&node->geometry_to_world, p);
+
+            const float x = (float)wp.x;
+            const float y = (float)wp.y;
+            const float z = (float)wp.z;
+
+            if (first)
+            {
+                minX = maxX = x;
+                minY = maxY = y;
+                minZ = maxZ = z;
+                first = false;
+            }
+            else
+            {
+                if (x < minX) minX = x; if (x > maxX) maxX = x;
+                if (y < minY) minY = y; if (y > maxY) maxY = y;
+                if (z < minZ) minZ = z; if (z > maxZ) maxZ = z;
+            }
+        }
+    }
+
+    if (first) return;
+
+    const float sx = (maxX - minX);
+    const float sy = (maxY - minY);
+    const float sz = (maxZ - minZ);
+
+    // 最大軸長は常に保持（scene なし時の保険）
+    float maxe = sx;
+    if (sy > maxe) maxe = sy;
+    if (sz > maxe) maxe = sz;
+    measured_max_extent_ = maxe;
+
+    // up軸に沿った「高さ」を保持
+    float height = sy;
+    switch (scene->settings.axes.up)
+    {
+    case UFBX_COORDINATE_AXIS_POSITIVE_X:
+    case UFBX_COORDINATE_AXIS_NEGATIVE_X:
+        height = sx;
+        break;
+    case UFBX_COORDINATE_AXIS_POSITIVE_Y:
+    case UFBX_COORDINATE_AXIS_NEGATIVE_Y:
+        height = sy;
+        break;
+    case UFBX_COORDINATE_AXIS_POSITIVE_Z:
+    case UFBX_COORDINATE_AXIS_NEGATIVE_Z:
+        height = sz;
+        break;
+    default:
+        height = maxe;
+        break;
+    }
+
+    measured_height_ = height;
+    measured_bounds_valid_ = true;
+}
+
 
 //============================================================
 // Load
@@ -215,7 +325,84 @@ bool FbxModel::Load(const char* fbx_path)
         }
     }
 
-    // p
+
+    // scene 破棄後でも targetHeight 正規化が安定するように、ここで実寸を計測
+    MeasureBoundsFromScene(scene);
+
+    // ------------------------------------------------------------
+    // 令和大改革: アニメをロード時にベイクして保持し、ufbx_scene を破棄する
+    //   - ランタイムは baked_clips_ から再生する（scene/ufbx_anim を保持しない）
+    // ------------------------------------------------------------
+    baked_clips_.clear();
+    active_clip_index_ = 0;
+    {
+        const size_t bone_count = skeleton_.Bones().size();
+        if (scene && bone_count > 0)
+        {
+            double fps = scene->settings.frames_per_second;
+            if (fps <= 0.0) fps = 30.0;
+
+            auto bake_one = [&](const ufbx_anim* anim, const char* name_cstr)
+                {
+                    if (!anim) return;
+                    const double duration = anim->time_end - anim->time_begin;
+                    if (duration <= 0.0) return;
+
+                    int endFrame = (int)(duration * fps + 0.5);
+                    if (endFrame < 1) endFrame = 1;
+                    const int frame_count = endFrame + 1;
+
+                    BakedClip clip;
+                    clip.name = name_cstr ? name_cstr : std::string();
+                    clip.fps = fps;
+                    clip.frame_count = frame_count;
+                    clip.world_frames.resize((size_t)frame_count * bone_count);
+
+                    const double secondsPerFrame = 1.0 / fps;
+                    for (int f = 0; f < frame_count; ++f)
+                    {
+                        const double t = anim->time_begin + (double)f * secondsPerFrame;
+                        skeleton_.UpdateAtTime(scene, anim, t);
+                        const auto& cw = skeleton_.CurrWorld();
+                        const size_t base = (size_t)f * bone_count;
+                        for (size_t i = 0; i < bone_count; ++i)
+                        {
+                            clip.world_frames[base + i] = cw[i];
+                        }
+                    }
+
+                    baked_clips_.push_back(std::move(clip));
+                };
+
+            if (scene->anim_stacks.count > 0)
+            {
+                for (size_t i = 0; i < scene->anim_stacks.count; ++i)
+                {
+                    const ufbx_anim_stack* st = scene->anim_stacks.data[i];
+                    if (!st || !st->anim) continue;
+                    std::string nm;
+                    if (st->name.data && st->name.length > 0) {
+                        nm.assign(st->name.data, st->name.length);
+                    }
+                    bake_one(st->anim, nm.c_str());
+                }
+            }
+            else
+            {
+                // anim_stacks が無い FBX でも default anim があればベイク
+                bake_one(scene->anim, "Default");
+            }
+        }
+    }
+
+    // scene 破棄（以降ランタイムでは保持しない）
+    skeleton_.DetachFromScene();
+    scene_.reset(nullptr);
+    last_anim_ = nullptr;
+    last_time_sec_ = -1.0;
+    pose_dirty_ = true;
+
+    // 初期姿勢を適用
     UpdateSkeletonAtTime(0.0);
     return true;
 }
@@ -232,12 +419,133 @@ const ufbx_anim* FbxModel::GetDefaultAnim() const
 }
 
 //============================================================
+// scene 破棄運用（ベイク済み）: AnimStack 互換 API
+//============================================================
+int FbxModel::GetRuntimeAnimStackCount() const
+{
+    const ufbx_scene* scene = scene_.get();
+    if (scene) {
+        return (int)scene->anim_stacks.count;
+    }
+    return (int)baked_clips_.size();
+}
+
+std::string FbxModel::GetRuntimeAnimStackName(int index) const
+{
+    const ufbx_scene* scene = scene_.get();
+    if (scene)
+    {
+        if (index < 0 || (size_t)index >= scene->anim_stacks.count) return std::string();
+        const ufbx_anim_stack* st = scene->anim_stacks.data[index];
+        if (!st) return std::string();
+        if (st->name.data && st->name.length > 0) return std::string(st->name.data, st->name.length);
+        return std::string();
+    }
+    if (index < 0 || (size_t)index >= baked_clips_.size()) return std::string();
+    return baked_clips_[(size_t)index].name;
+}
+
+void FbxModel::SetRuntimeAnimStack(int index)
+{
+    const int count = GetRuntimeAnimStackCount();
+    if (count <= 0) return;
+    if (index < 0) index = 0;
+    if (index >= count) index = count - 1;
+    active_clip_index_ = index;
+}
+
+int FbxModel::GetRuntimeAnimStartFrame(int index) const
+{
+    (void)index;
+    return 0;
+}
+
+int FbxModel::GetRuntimeAnimEndFrame(int index) const
+{
+    const ufbx_scene* scene = scene_.get();
+    if (scene)
+    {
+        if (index < 0 || (size_t)index >= scene->anim_stacks.count) return 0;
+        const ufbx_anim_stack* st = scene->anim_stacks.data[index];
+        if (!st || !st->anim) return 0;
+        double fps = scene->settings.frames_per_second;
+        if (fps <= 0.0) fps = 30.0;
+        const double duration = st->anim->time_end - st->anim->time_begin;
+        int endFrame = (int)(duration * fps + 0.5);
+        if (endFrame < 0) endFrame = 0;
+        return endFrame;
+    }
+    if (index < 0 || (size_t)index >= baked_clips_.size()) return 0;
+    const int fc = baked_clips_[(size_t)index].frame_count;
+    return fc > 0 ? (fc - 1) : 0;
+}
+
+double FbxModel::GetRuntimeAnimFps(int index) const
+{
+    const ufbx_scene* scene = scene_.get();
+    if (scene)
+    {
+        double fps = scene->settings.frames_per_second;
+        if (fps <= 0.0) fps = 30.0;
+        return fps;
+    }
+    if (index < 0 || (size_t)index >= baked_clips_.size()) return 30.0;
+    return baked_clips_[(size_t)index].fps;
+}
+
+void FbxModel::UpdateSkeletonAtFrame(int stackIndex, double frame)
+{
+    const ufbx_scene* scene = scene_.get();
+    if (scene)
+    {
+        // 旧経路: 秒で評価
+        if (stackIndex >= 0 && (size_t)stackIndex < scene->anim_stacks.count)
+        {
+            const ufbx_anim_stack* st = scene->anim_stacks.data[stackIndex];
+            if (st && st->anim)
+            {
+                const double fps = GetRuntimeAnimFps(stackIndex);
+                const double secondsPerFrame = 1.0 / fps;
+                const double t = st->anim->time_begin + frame * secondsPerFrame;
+                UpdateSkeletonAtTime(st->anim, t);
+                return;
+            }
+        }
+        UpdateSkeletonAtTime(0.0);
+        return;
+    }
+
+    if (baked_clips_.empty()) return;
+    if (stackIndex < 0) stackIndex = 0;
+    if ((size_t)stackIndex >= baked_clips_.size()) stackIndex = (int)baked_clips_.size() - 1;
+
+    const BakedClip& clip = baked_clips_[(size_t)stackIndex];
+    const size_t bone_count = skeleton_.Bones().size();
+    if (bone_count == 0) return;
+    if (clip.frame_count <= 0) return;
+
+    int f = (int)std::floor(frame + 1e-6);
+    if (f < 0) f = 0;
+    if (f >= clip.frame_count) f = clip.frame_count - 1;
+
+    const size_t base = (size_t)f * bone_count;
+    skeleton_.ApplyBakedPoseWorld(&clip.world_frames[base], bone_count);
+}
+
+//============================================================
 // UpdateSkeletonAtTimeiftHgAjj
 //============================================================
 void FbxModel::UpdateSkeletonAtTime(double t_sec)
 {
     const ufbx_scene* scene = scene_.get();
     const ufbx_anim* anim = GetDefaultAnim();
+
+    // scene を保持しない運用（ベイク済み）: t_sec をフレーム番号として解釈し、active_clip_index_ を再生
+    if (!scene)
+    {
+        UpdateSkeletonAtFrame(active_clip_index_, t_sec);
+        return;
+    }
 
     // Step2: 同一 anim + 同一 timeSec なら skeleton 更新をスキップ
     if (anim == last_anim_ && t_sec == last_time_sec_)
@@ -260,6 +568,13 @@ void FbxModel::UpdateSkeletonAtTime(double t_sec)
 void FbxModel::UpdateSkeletonAtTime(const ufbx_anim* anim, double t_sec)
 {
     const ufbx_scene* scene = scene_.get();
+
+    // scene を保持しない運用（ベイク済み）: anim は使用せず、active_clip_index_ を再生
+    if (!scene)
+    {
+        UpdateSkeletonAtFrame(active_clip_index_, t_sec);
+        return;
+    }
 
     // Step2: 同一 anim + 同一 timeSec なら skeleton 更新をスキップ
     if (anim == last_anim_ && t_sec == last_time_sec_)

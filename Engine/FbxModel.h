@@ -79,6 +79,17 @@ public:
         // V[Ɋ܂܂uftHgAjvԂiȂ nullptrj
     const ufbx_anim* GetDefaultAnim() const;
 
+    // ------------------------------------------------------------
+    // scene 破棄運用（ベイク済み）向け API
+    // ------------------------------------------------------------
+    int  GetRuntimeAnimStackCount() const;
+    std::string GetRuntimeAnimStackName(int index) const;
+    void SetRuntimeAnimStack(int index);
+    int  GetRuntimeAnimStartFrame(int index) const;
+    int  GetRuntimeAnimEndFrame(int index) const;
+    double GetRuntimeAnimFps(int index) const;
+    void UpdateSkeletonAtFrame(int stackIndex, double frame);
+
     // ftHgAj̎ t_sec ŃXPgXV
     void UpdateSkeletonAtTime(double t_sec);
 
@@ -101,6 +112,11 @@ public:
     // V[aANZTiSkeleton ɃtH[hj
     float SceneRadius();
     float SceneHeight();   // ǉFY imaxY - minYj
+    // scene を破棄しても targetHeight 正規化に必要な実寸を参照できるように保持
+    float MeasuredHeight() const { return measured_height_; }
+    float MeasuredMaxExtent() const { return measured_max_extent_; }
+    // MeasuredHeight() と同じ up 軸での最小値（メートル基準）。足元を地面に合わせる用途。
+    float MeasuredMinUp() const { return measured_min_up_; }
     float MeasureSize(SizeMeasureAxis axis);
     float MeasureSkinnedHeightY();
 
@@ -113,6 +129,7 @@ public:
 private:
     // V[ǂݍ݂̉
     bool LoadScene(const char* fbx_path);
+    void MeasureBoundsFromScene(const ufbx_scene* scene);
 
 private:
     // ufbx V[{́iFbxSkeleton / FbxMesh ͂QƂč\zj
@@ -129,9 +146,28 @@ private:
     int debug_draw_mesh_index_ = -1;
 
     FbxMeshGroup mesh_group_;
+
+    // ------------------------------------------------------------
+    // scene を保持しない運用: アニメをロード時にベイクして保持
+    // ------------------------------------------------------------
+    struct BakedClip
+    {
+        std::string name;
+        double fps = 30.0;
+        int frame_count = 0; // 0..endFrame を含む総フレーム数
+        std::vector<DirectX::XMFLOAT4X4> world_frames; // [frame][bone]
+    };
+    std::vector<BakedClip> baked_clips_;
+    int active_clip_index_ = 0;
+
+    // scene 破棄後でも targetHeight 正規化が安定するように、ロード時に実寸を計測して保持（メートル基準）
+    float measured_height_ = 0.0f;      // up軸に沿った高さ
+    float measured_max_extent_ = 0.0f;  // AABBの最大軸長（保険）
+    float measured_min_up_ = 0.0f;      // up軸の最小値（足元合わせ用）
+    bool  measured_bounds_valid_ = false;
+
     // Step2: cache init
     const ufbx_anim* last_anim_ = nullptr;
     double last_time_sec_ = -1.0;
     bool pose_dirty_ = true;
-
 };

@@ -24,11 +24,12 @@ void TestScene::Initialize()
     Camera::SetTarget({ 0.0, 1.0, 0.0 });
 
     actor_ = new GameObject(&Root(), "Actor");
-    auto mc = new ModelComponent(actor_, "Assets/BoyJump.fbx");
+    auto mc = new ModelComponent(actor_, "Assets/BoyJump.fbx", 1.0f);
 
     // モデル（必要に応じてパス・正規化高さを調整）
     actor_->AddComponent(mc);
-    mc->SetRootRotationYawPitchRollDeg(0, 90, 0);
+    //mc->SetRootScale(1.0f);
+    //mc->SetRootRotationYawPitchRollDeg(0, 90, 0);
     // 初期位置 mc_
     actor_->GetTransform().position_ = { 0.0f, 0.5f, 0.0f };
     actor_->GetTransform().scale_ = { 1.0f, 1.0f, 1.0f };
@@ -60,9 +61,10 @@ void TestScene::Initialize()
 
     // モデル（必要に応じてパス・正規化高さを調整）
     actor3_->AddComponent(mc3);
-    mc3->SetAnimStack(1);
-    mc3->SetAnimRange(0, 229, 1.0f);
-    mc3->SetLoop(true);
+    mc3->SetRootScale(0.1f);
+    //mc3->SetAnimStack(1);
+    //mc3->SetAnimRange(0, 229, 1.0f);
+    //mc3->SetLoop(true);
     // 初期位置 mc_
     actor3_->GetTransform().position_ = { -1.0f, 0.0f, 0.0f };
     actor3_->GetTransform().scale_ = { 1.0f, 1.0f, 1.0f };
@@ -92,18 +94,18 @@ void TestScene::Update()
     const auto& t = actor_->GetTransform();
 
     // 「後ろに5」「上に2」から見る
-    DirectX::XMFLOAT3 eye{
-        t.position_.x,
-        t.position_.y + 2.0f,
-        t.position_.z - 5.0f
-    };
+    //DirectX::XMFLOAT3 eye{
+    //    t.position_.x,
+    //    t.position_.y + 2.0f,
+    //    t.position_.z - 5.0f
+    //};
 
-    // 少し上を注視
-    DirectX::XMFLOAT3 at{
-        t.position_.x,
-        t.position_.y+1,
-        t.position_.z
-    };
+    //// 少し上を注視
+    //DirectX::XMFLOAT3 at{
+    //    t.position_.x,
+    //    t.position_.y+1,
+    //    t.position_.z
+    //};
 
     //Camera::SetPosition({ eye.x, eye.y, eye.z });
     //Camera::SetTarget({at.x, at.y, at.z});

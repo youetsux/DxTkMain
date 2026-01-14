@@ -14,12 +14,7 @@
 #include <cstring>
 #include <utility>
 
-//#define DBG_LOG(fmt, ...)                          \
-//do {                                               \
-//    char _buf[512];                                \
-//    std::snprintf(_buf, sizeof(_buf), fmt, __VA_ARGS__); \
-//    OutputDebugStringA(_buf);                      \
-//} while (0)
+
 
 using namespace DirectX;
 
@@ -158,8 +153,8 @@ namespace
         double fps = 0.0;
         if (md.pFbx)
         {
-            const ufbx_scene* scene = md.pFbx->Scene();
-            if (scene) fps = scene->settings.frames_per_second;
+            // scene を保持しない運用（ベイク済み）の場合もここで取得する
+            fps = md.pFbx->GetRuntimeAnimFps(md.anim.stackIndex);
         }
         if (fps <= 0.0) fps = 30.0;
 
@@ -167,7 +162,7 @@ namespace
             (md.anim.endFrame > md.anim.startFrame) &&
             (md.anim.speed != 0.0f);
 
-        if (anim && hasAnimSetting)
+        if (md.pFbx && hasAnimSetting)
         {
             const float prevFrame = md.anim.currentFrame;
 
@@ -226,26 +221,46 @@ namespace
             if (needRecalc)
             {
                 const double secondsPerFrame = 1.0 / fps;
-                md.anim.timeSec = anim->time_begin + double(md.anim.currentFrame) * secondsPerFrame;
+                md.anim.timeSec = 0.0; // scene 破棄運用では使用しない
             }
 
-            if (md.pFbx) md.pFbx->UpdateSkeletonAtTime(anim, md.anim.timeSec);
+            if (md.pFbx) md.pFbx->UpdateSkeletonAtFrame(md.anim.stackIndex, md.anim.currentFrame);
         }
-        else if (anim)
+        else if (md.pFbx)
         {
             md.anim.currentFrame = (float)md.anim.startFrame;
 
             const double secondsPerFrame = 1.0 / fps;
-            md.anim.timeSec = anim->time_begin + double(md.anim.currentFrame) * secondsPerFrame;
+            md.anim.timeSec = 0.0; // scene 破棄運用では使用しない
 
-            if (md.pFbx) md.pFbx->UpdateSkeletonAtTime(anim, md.anim.timeSec);
+            if (md.pFbx) md.pFbx->UpdateSkeletonAtFrame(md.anim.stackIndex, md.anim.currentFrame);
         }
         else
         {
-            if (md.pFbx) md.pFbx->UpdateSkeletonAtTime(0.0);
+            if (md.pFbx) md.pFbx->UpdateSkeletonAtFrame(md.anim.stackIndex, 0.0);
         }
     }
 
+    namespace
+    {
+        inline void DBG_LOG(const char* fmt, ...)
+        {
+#ifdef _DEBUG
+            char buf[1024];
+
+            va_list args;
+            va_start(args, fmt);
+            vsnprintf_s(buf, sizeof(buf), _TRUNCATE, fmt, args);
+            va_end(args);
+
+            // Visual Studio の「出力」ウィンドウ
+            OutputDebugStringA(buf);
+
+            // コンソール（必要なら）
+            std::printf("%s", buf);
+#endif
+        }
+    }
 
 
     // Model-space root pose first, then world placement:
@@ -261,10 +276,24 @@ namespace
         XMVECTOR q = XMLoadFloat4(&md.rootRotationQ);
         XMMATRIX rootR = XMMatrixRotationQuaternion(q);
 
-        XMMATRIX rootLocal = rootS * rootR;
+        // 足元合わせ: MeasuredMinUp() を 0 に持ち上げる
+        // (rootS が先に掛かるので、平行移動量も rootScale を掛けた値にする)
+        float groundUp = 0.0f;
+        if (md.pFbx)
+        {
+            groundUp = md.pFbx->MeasuredMinUp();
+        }
+        XMMATRIX rootT = XMMatrixTranslation(0.0f, -groundUp * md.rootScale, 0.0f);
+
+        XMMATRIX rootLocal = rootS * rootR * rootT;
 
         // ★ここが重要：rootLocal を先に掛ける
         // これで「ルート姿勢はモデル空間」「Transformはワールド配置」になる
+        XMFLOAT4X4 m;
+        XMStoreFloat4x4(&m, rootLocal * world);
+        DBG_LOG("[World] scale=%.6f pos=(%.3f,%.3f,%.3f)\n",
+            md.rootScale, m._41, m._42, m._43);
+
         return rootLocal * world;
     }
 }
@@ -288,11 +317,11 @@ namespace Model
         g_modelCache.clear();
         g_refCount.clear();
     }
-
     int Load(std::string fileName)
     {
         int h = AllocHandle();
         auto& md = g_models[h];
+
 
         if (md.inUse && md.pFbx)
         {
@@ -333,6 +362,28 @@ namespace Model
         return h;
     }
 
+
+    namespace
+    {
+        inline void DBG_LOG(const char* fmt, ...)
+        {
+#ifdef _DEBUG
+            char buf[1024];
+
+            va_list args;
+            va_start(args, fmt);
+            vsnprintf_s(buf, sizeof(buf), _TRUNCATE, fmt, args);
+            va_end(args);
+
+            // Visual Studio の「出力」ウィンドウ
+            OutputDebugStringA(buf);
+
+            // コンソール（必要なら）
+            std::printf("%s", buf);
+#endif
+        }
+    }
+
     int Load(const std::string& fileName, float targetHeight)
     {
         int handle = Load(fileName);
@@ -352,131 +403,40 @@ namespace Model
             return handle;
         }
 
-        float minX = 0.0f, minY = 0.0f, minZ = 0.0f;
-        float maxX = 0.0f, maxY = 0.0f, maxZ = 0.0f;
-        bool first = true;
+        // scene を保持しない運用でも targetHeight 正規化が安定するように、
+        // FbxModel 側でロード時に計測した実寸（geometry_to_world 適用済み・unit_meters 適用済み）を優先する。
+        DBG_LOG("[Measured] h=%.6f max=%.6f\n",
+            md.pFbx->MeasuredHeight(),
+            md.pFbx->MeasuredMaxExtent());
 
-        const ufbx_scene* scene = md.pFbx->Scene();
-        if (scene && scene->root_node)
+        float height = md.pFbx->MeasuredHeight();
+        if (height <= 1e-5f)
         {
-            std::vector<const ufbx_node*> stack;
-            stack.reserve(256);
-            stack.push_back(scene->root_node);
-
-            while (!stack.empty())
-            {
-                const ufbx_node* node = stack.back();
-                stack.pop_back();
-                if (!node) continue;
-
-                const size_t cc = node->children.count;
-                for (size_t i = 0; i < cc; ++i)
-                {
-                    const ufbx_node* c = node->children.data[i];
-                    if (c) stack.push_back(c);
-                }
-
-                if (!node->mesh) continue;
-                const ufbx_mesh* m = node->mesh;
-                if (!m->vertex_position.exists) continue;
-
-                const size_t vcount = m->vertex_position.values.count;
-                if (vcount == 0) continue;
-
-                const size_t MAX_SAMPLE = 20000;
-                size_t step = 1;
-                if (vcount > MAX_SAMPLE) step = vcount / MAX_SAMPLE;
-
-                for (size_t vi = 0; vi < vcount; vi += step)
-                {
-                    const ufbx_vec3 p = m->vertex_position.values.data[vi];
-                    const ufbx_vec3 wp = ufbx_transform_position(&node->geometry_to_world, p);
-
-                    const float x = (float)wp.x;
-                    const float y = (float)wp.y;
-                    const float z = (float)wp.z;
-
-                    if (first)
-                    {
-                        minX = maxX = x;
-                        minY = maxY = y;
-                        minZ = maxZ = z;
-                        first = false;
-                    }
-                    else
-                    {
-                        if (x < minX) minX = x; if (x > maxX) maxX = x;
-                        if (y < minY) minY = y; if (y > maxY) maxY = y;
-                        if (z < minZ) minZ = z; if (z > maxZ) maxZ = z;
-                    }
-                }
-            }
+            height = md.pFbx->MeasuredMaxExtent();
         }
 
-        float sx = 0.0f, sy = 0.0f, sz = 0.0f;
-        if (!first)
-        {
-            sx = (maxX - minX);
-            sy = (maxY - minY);
-            sz = (maxZ - minZ);
-        }
-        else
+        // それでも取れない場合のみ、既存のフォールバックへ
+        if (height <= 1e-5f)
         {
             FbxMeshGroup& group = md.pFbx->MeshGroup();
             if (!group.Empty() && group.MeshCount() > 0)
             {
                 const BVolume& bv = group.GetBV();
-                sx = (bv.max.x - bv.min.x);
-                sy = (bv.max.y - bv.min.y);
-                sz = (bv.max.z - bv.min.z);
-            }
-            else
-            {
-                sy = md.pFbx->SceneHeight();
-                sx = 0.0f;
-                sz = 0.0f;
-            }
-        }
+                const float sx = (bv.max.x - bv.min.x);
+                const float sy = (bv.max.y - bv.min.y);
+                const float sz = (bv.max.z - bv.min.z);
 
-        float height = sy;
-
-        if (scene)
-        {
-            switch (scene->settings.axes.up)
-            {
-            case UFBX_COORDINATE_AXIS_POSITIVE_X:
-            case UFBX_COORDINATE_AXIS_NEGATIVE_X:
-                height = sx;
-                break;
-
-            case UFBX_COORDINATE_AXIS_POSITIVE_Y:
-            case UFBX_COORDINATE_AXIS_NEGATIVE_Y:
-                height = sy;
-                break;
-
-            case UFBX_COORDINATE_AXIS_POSITIVE_Z:
-            case UFBX_COORDINATE_AXIS_NEGATIVE_Z:
-                height = sz;
-                break;
-
-            default:
+                // scene が無い場合、代表サイズとして最大軸長を採用（寝ている等でsyが薄いケース対策）
                 height = sx;
                 if (sy > height) height = sy;
                 if (sz > height) height = sz;
-                break;
+            }
+            else
+            {
+                // 最終フォールバック（SceneHeight は実装依存だがゼロよりはマシ）
+                height = md.pFbx->SceneHeight();
             }
         }
-
-        // ===== root scale debug =====
-        //DBG_LOG(
-        //    "[RootScale] height=%.6f target=%.6f rootScale=%.6f finite(h=%d s=%d)\n",
-        //    height,
-        //    targetHeight,
-        //    md.rootScale,
-        //    std::isfinite(height),
-        //    std::isfinite(md.rootScale)
-        //);
-        // ============================
 
         const float EPS = 1e-5f;
         if (height < EPS)
@@ -488,19 +448,17 @@ namespace Model
             md.rootScale = targetHeight / height;
         }
 
-        // ===== root scale debug =====
-        //DBG_LOG(
-        //    "[RootScale] height=%.6f target=%.6f rootScale=%.6f finite(h=%d s=%d)\n",
-        //    height,
-        //    targetHeight,
-        //    md.rootScale,
-        //    std::isfinite(height),
-        //    std::isfinite(md.rootScale)
-        //);
-        // ============================
+        //DBG_LOG("[RootScale] target=%.6f height=%.6f rootScale=%.9f\n",
+        //    targetHeight, height, md.rootScale);
 
         return handle;
     }
+
+
+
+
+
+
 
     void Draw(int handle)
     {
@@ -516,12 +474,14 @@ namespace Model
 
         UpdateAnimation(md, anim);
 
-        const XMMATRIX world = BuildWorldMatrix(md);
+        const XMMATRIX world = BuildWorldMatrix(md);   // ← ここで rootScale/rootRotation 済み
         const XMMATRIX view = Camera::GetViewMatrix();
         const XMMATRIX proj = Camera::GetProjectionMatrix();
 
         md.pFbx->Draw(world, view, proj);
     }
+
+
 
     void DrawSkeleton(int handle)
     {
@@ -595,28 +555,17 @@ namespace Model
         if (!IsValidHandle(handle)) return;
 
         auto& md = g_models[handle];
-        const ufbx_scene* scene = md.pFbx ? md.pFbx->Scene() : nullptr;
-        const ufbx_anim* anim = ResolveAnim(scene, md);
-        if (!scene || !anim) return;
+        if (!md.pFbx) return;
 
-        double fps = scene->settings.frames_per_second;
-        if (fps <= 0.0) fps = 30.0;
-
-        const double duration = anim->time_end - anim->time_begin;
-        if (duration <= 0.0) return;
-
-        int endFrame = (int)(duration * fps + 0.5); // 四捨五入
-        if (endFrame < 1) endFrame = 1;
-
-        // 開始は 0 として扱う（UpdateAnimation 側で anim->time_begin を足す）
+        // scene を保持しない運用（ベイク済み）でも成立するように、runtime 情報から range を組む
+        const int endFrame = md.pFbx->GetRuntimeAnimEndFrame(md.anim.stackIndex);
         md.anim.startFrame = 0;
         md.anim.endFrame = endFrame;
         md.anim.speed = animSpeed;
         md.anim.currentFrame = 0.0f;
         md.anim.timeSec = 0.0;
-
-        // loop/paused は既存設定を尊重（必要なら呼び出し側で SetAnimLoop/SetAnimPaused）
     }
+
 
     int GetAnimFrame(int handle)
     {
@@ -656,66 +605,56 @@ namespace Model
     int GetAnimStackCount(int handle)
     {
         if (!IsValidHandle(handle)) return 0;
-
         auto& md = g_models[handle];
-        const ufbx_scene* scene = md.pFbx ? md.pFbx->Scene() : nullptr;
-        if (!scene) return 0;
-
-        return (int)scene->anim_stacks.count;
+        if (!md.pFbx) return 0;
+        return md.pFbx->GetRuntimeAnimStackCount();
     }
+
 
     std::string GetAnimStackName(int handle, int index)
     {
         if (!IsValidHandle(handle)) return {};
-
         auto& md = g_models[handle];
-        const ufbx_scene* scene = md.pFbx ? md.pFbx->Scene() : nullptr;
-        if (!scene) return {};
-
-        if (index < 0 || (size_t)index >= scene->anim_stacks.count) return {};
-
-        const ufbx_anim_stack* stack = scene->anim_stacks.data[index];
-        if (!stack) return {};
-
-        return std::string(stack->name.data, stack->name.length);
+        if (!md.pFbx) return {};
+        return md.pFbx->GetRuntimeAnimStackName(index);
     }
+
 
     void SetAnimStack(int handle, int index)
     {
         if (!IsValidHandle(handle)) return;
 
         auto& md = g_models[handle];
-        const ufbx_scene* scene = md.pFbx ? md.pFbx->Scene() : nullptr;
-        if (!scene) return;
+        if (!md.pFbx) return;
 
-        if (index < 0 || (size_t)index >= scene->anim_stacks.count) return;
+        const int count = md.pFbx->GetRuntimeAnimStackCount();
+        if (count <= 0) return;
+        if (index < 0 || index >= count) return;
 
         md.anim.stackIndex = index;
         md.anim.currentFrame = (float)md.anim.startFrame;
     }
+
 
     void SetAnimStack(int handle, const std::string& stackName)
     {
         if (!IsValidHandle(handle)) return;
 
         auto& md = g_models[handle];
-        const ufbx_scene* scene = md.pFbx ? md.pFbx->Scene() : nullptr;
-        if (!scene) return;
+        if (!md.pFbx) return;
 
-        for (size_t i = 0; i < scene->anim_stacks.count; ++i)
+        const int count = md.pFbx->GetRuntimeAnimStackCount();
+        for (int i = 0; i < count; ++i)
         {
-            const ufbx_anim_stack* stack = scene->anim_stacks.data[i];
-            if (!stack) continue;
-
-            if (stackName.size() == stack->name.length &&
-                std::memcmp(stackName.c_str(), stack->name.data, stack->name.length) == 0)
+            if (md.pFbx->GetRuntimeAnimStackName(i) == stackName)
             {
-                md.anim.stackIndex = (int)i;
+                md.anim.stackIndex = i;
                 md.anim.currentFrame = (float)md.anim.startFrame;
                 return;
             }
         }
     }
+
 
     void SetAnimPaused(int handle, bool paused)
     {

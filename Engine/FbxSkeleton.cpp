@@ -185,6 +185,37 @@ std::vector<DirectX::XMMATRIX>& FbxSkeleton::SkinMatrices()
     return data_.skin_mats_;
 }
 
+
+//============================================================
+// ApplyBakedPoseWorld
+//   - scene を保持しない運用向け: ベイク済み world 行列配列をそのまま適用
+//============================================================
+void FbxSkeleton::ApplyBakedPoseWorld(const DirectX::XMFLOAT4X4* worlds, size_t bone_count)
+{
+    if (!worlds) return;
+    if (bone_count == 0) return;
+    if (data_.bones_.size() != bone_count) return;
+
+    if (data_.curr_world_.size() != bone_count) {
+        data_.curr_world_.resize(bone_count);
+    }
+
+    for (size_t i = 0; i < bone_count; ++i) {
+        data_.curr_world_[i] = worlds[i];
+    }
+}
+
+//============================================================
+// DetachFromScene
+//   - ufbx_scene 破棄前に呼び、scene 由来ポインタを無効化する
+//============================================================
+void FbxSkeleton::DetachFromScene()
+{
+    for (auto& b : data_.bones_) {
+        b.node = nullptr;
+    }
+    data_.bone_index_of_.clear();
+}
 bool FbxSkeleton::BuildFromScene(const ufbx_scene* scene)
 {
     data_.bones_.clear();
