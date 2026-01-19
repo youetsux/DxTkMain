@@ -976,9 +976,11 @@ void FbxMesh::ExpandAllNodes(const ufbx_scene* scene,
 
 	std::vector<const ufbx_node*> nodes = FbxMeshBuild::MakeSceneNodeList(scene);
 
-	// ExpandAllNodes は geometry_to_world を適用しない（従来どおり）
-	// さらに scene_radius_ を更新する（従来どおり）
-	ExpandNodesImpl(scene, nodes, skeleton, false, true);
+	// ExpandAllNodes: scene 全体のメッシュを 1つのメッシュにまとめる。
+	// そのため各ノードの配置（geometry_to_world）を頂点側に焼き込まないと、
+	// ノードの回転/平行移動/スケールが失われて原点に潰れてしまう。
+	// さらに scene_radius_ を更新する。
+	ExpandNodesImpl(scene, nodes, skeleton, true, true);
 }
 
 

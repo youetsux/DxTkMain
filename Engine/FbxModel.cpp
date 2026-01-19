@@ -132,6 +132,12 @@ bool FbxModel::LoadScene(const char* fbx_path)
 
     // Units: normalize to meters so all measurements are in meters.
     opts.target_unit_meters = 1.0;
+
+    // Space conversion policy:
+    // - Bake unit scaling into geometry, keep node transforms stable.
+    //   This matches the typical "import meshes as they appear" expectation and
+    //   keeps our downstream code (mesh build + skeleton bind math) consistent.
+    opts.space_conversion = UFBX_SPACE_CONVERSION_MODIFY_GEOMETRY;
     ufbx_scene* raw_scene = ufbx_load_file(fbx_path, &opts, &err);
 
     if (!raw_scene) {
