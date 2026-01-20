@@ -33,9 +33,9 @@ void TestScene::Initialize()
     // 初期位置 mc_
     actor_->GetTransform().position_ = { 0.0f, 0.5f, 0.0f };
     actor_->GetTransform().scale_ = { 1.0f, 1.0f, 1.0f };
-    //mc->SetAnimStack(0);
-    //mc->SetAnimRange(0, 92, 1.0f);
-    //mc->SetLoop(true);
+    mc->SetAnimStack(0);
+    mc->SetAnimRange(0, 92, 1.0f);
+    mc->SetLoop(true);
 
     //2体目
     actor2_ = new GameObject(&Root(), "Actor2");
@@ -61,9 +61,9 @@ void TestScene::Initialize()
 
     // モデル（必要に応じてパス・正規化高さを調整）
     actor3_->AddComponent(mc3);
-    //mc3->SetAnimStack(1);
-    //mc3->SetAnimRange(0, 229, 1.0f);
-    //mc3->SetLoop(true);
+    mc3->SetAnimStack(1);
+    mc3->SetAnimRange(0, 229, 1.0f);
+    mc3->SetLoop(true);
     // 初期位置 mc_
     actor3_->GetTransform().position_ = { -1.0f, 0.0f, 0.0f };
     actor3_->GetTransform().scale_ = { 1.0f, 1.0f, 1.0f };
