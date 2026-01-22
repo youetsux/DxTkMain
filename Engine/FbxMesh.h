@@ -140,11 +140,6 @@ private:
 
     void PrepareExpandImpl();
 
-    MeshPart MakeMeshPartForMaterial(
-        const ufbx_node* node,
-        const ufbx_mesh* mesh,
-        uint32_t mat_index) const;
-
     void ExpandMaterialGroupImpl(
         const ufbx_node* node,
         const ufbx_mesh* mesh,

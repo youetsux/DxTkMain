@@ -753,15 +753,6 @@ void FbxMesh::ExpandSingleNodeImpl(
 		apply_geo);
 }
 
-FbxMesh::MeshPart FbxMesh::MakeMeshPartForMaterial(
-	const ufbx_node* node,
-	const ufbx_mesh* mesh,
-	uint32_t mat_index) const
-{
-	MeshPart part = MakeMeshPartForMaterial(node, mesh, mat_index);
-	return part;
-}
-
 void FbxMesh::ExpandMaterialGroupImpl(
 	const ufbx_node* node,
 	const ufbx_mesh* mesh,
