@@ -128,7 +128,7 @@ namespace
             }
         }
 
-        pFbx->SetDebugDrawMeshIndex(s_debug_draw_mesh_index);
+        // SetDebugDrawMeshIndex is removed - feature not implemented in FbxModel
     }
 
     const ufbx_anim* ResolveAnim(const ufbx_scene* scene, const ModelData& md)
@@ -432,7 +432,9 @@ namespace Model
             }
             else
             {
-                sy = md.pFbx->SceneHeight();
+                // SceneHeight is removed, use BVolume directly
+                const BVolume& bv = md.pFbx->GetBV();
+                sy = (bv.max.y - bv.min.y);
                 sx = 0.0f;
                 sz = 0.0f;
             }
@@ -508,8 +510,6 @@ namespace Model
 
         auto& md = g_models[handle];
         if (!md.pFbx) return;
-
-        UpdateDebugSubMeshControl(md.pFbx);
 
         const ufbx_scene* scene = md.pFbx->Scene();
         const ufbx_anim* anim = ResolveAnim(scene, md);

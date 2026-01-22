@@ -1,5 +1,4 @@
 ﻿#pragma once
-#pragma once
 
 #include <memory>
 #include <string>
@@ -18,20 +17,20 @@ enum class SizeMeasureAxis
     WidthX,       // max.x - min.x
     DepthZ,       // max.z - min.z
     MaxExtent,    // max(x,y,z)
-    Radius,       // aiKvȂj
+    Radius,       // 球の半径
 };
 
 
-// ufbx O錾iwb_ɒˑȂ悤ɂj
+// ufbx 前宣言（ヘッダに直接定義を持ち込まないように）
 struct ufbx_scene;
 struct ufbx_anim;
 
 //======================================================================
 // FbxModel
-//   - ufbx_scene ̏L
-//   - FbxSkeletoni{[Aj[Vj
-//   - FbxMeshibVeNX``j
-// ܂Ƃ߂ĈNX
+//   - ufbx_scene の所有
+//   - FbxSkeleton（ボーン・アニメーション）
+//   - FbxMesh（メッシュ・テクスチャ・描画）
+// をまとめて扱うクラス
 //======================================================================
 class FbxModel
 {
@@ -40,53 +39,44 @@ public:
     ~FbxModel();
 
     // ------------------------------------------------------------
-    // ǂݍ݁Ej
+    // 読み込み・破棄
     // ------------------------------------------------------------
 
-    // FBX t@CǂݍŁAXPgbV\z
+    // FBX ファイル読み込み、スケルトン・メッシュ構築
     bool Load(const char* fbx_path);
 
-    // IȃZbgiėpꍇȂǁj
+    // 任意のリセット（再利用する場合など）
     void Reset();
 
     // ------------------------------------------------------------
-    // `
+    // 描画
     // ------------------------------------------------------------
 
-    // bV`iCPU XLjO݁j
+    // メッシュ描画（CPU スキニング込み）
     void Draw(const DirectX::XMMATRIX& world,
         const DirectX::XMMATRIX& view,
         const DirectX::XMMATRIX& proj);
 
-    // XPg̃fobO`i{[CȂǁj
+    // スケルトンのデバッグ描画（ボーン軸など）
     void DrawSkeleton(const DirectX::XMMATRIX& world,
         const DirectX::XMMATRIX& view,
         const DirectX::XMMATRIX& proj);
 
-
     // ------------------------------------------------------------
-    // Debug (Step4): Sub-mesh solo draw (multi-mesh only)
-    //   -1: draw all (default)
-    //  0..N-1: draw only that sub-mesh index (for visual verification)
+    // アニメーション
     // ------------------------------------------------------------
-    void SetDebugDrawMeshIndex(int index) { debug_draw_mesh_index_ = index; }
-    int  GetDebugDrawMeshIndex() const { return debug_draw_mesh_index_; }
 
-    // ------------------------------------------------------------
-        // Aj[V
-        // ------------------------------------------------------------
-
-        // V[Ɋ܂܂uftHgAjvԂiȂ nullptrj
+    // シーンに含まれる「デフォルトアニメ」を返す（なければ nullptr）
     const ufbx_anim* GetDefaultAnim() const;
 
-    // ftHgAj̎ t_sec ŃXPgXV
+    // デフォルトアニメの時刻 t_sec でスケルトン更新
     void UpdateSkeletonAtTime(double t_sec);
 
-    // I anim w肵Ď t_sec ̎pɍXV
+    // 任意の anim を指定して時刻 t_sec の姿勢に更新
     void UpdateSkeletonAtTime(const ufbx_anim* anim, double t_sec);
 
     // ------------------------------------------------------------
-    // ANZT
+    // アクセサ
     // ------------------------------------------------------------
     const ufbx_scene* Scene()       const { return scene_.get(); }
     FbxSkeleton& Skeleton() { return skeleton_; }
@@ -94,44 +84,31 @@ public:
     FbxMesh& Mesh() { return mesh_; }
     const FbxMesh& Mesh()        const { return mesh_; }
 
-    // BV ANZTiMesh ɃtH[hj
+    // 境界ボリューム アクセサ（Mesh にフォワード）
     BVolume& GetBV() { return mesh_.GetBV(); }
     const BVolume& GetBV() const { return mesh_.GetBV(); }
 
-    // V[aANZTiSkeleton ɃtH[hj
-    float SceneRadius();
-    float SceneHeight();   // ǉFY imaxY - minYj
-    float MeasureSize(SizeMeasureAxis axis);
-    float MeasureSkinnedHeightY();
+    // シーン半径アクセサ（Skeleton にフォワード）
+    float SceneRadius() const { return skeleton_.SceneRadius(); }
 
-    // ------------------------------------------------------------
-    // Step1: gݍݏi܂gpj
-    // ------------------------------------------------------------
+    // マルチメッシュ対応用
     FbxMeshGroup& MeshGroup() { return mesh_group_; }
     const FbxMeshGroup& MeshGroup() const { return mesh_group_; }
 
 private:
-    // V[ǂݍ݂̉
+    // シーン読み込みの内部処理
     bool LoadScene(const char* fbx_path);
 
 private:
-    // ufbx V[{́iFbxSkeleton / FbxMesh ͂QƂč\zj
+    // ufbx シーン本体（FbxSkeleton / FbxMesh は参照として構築）
     std::unique_ptr<ufbx_scene, void(*)(ufbx_scene*)> scene_{ nullptr, ufbx_free_scene };
 
-    // {[Aj[V
+    // ボーン・アニメーション
     FbxSkeleton skeleton_;
 
-    // bV{eNX`{`iP݊̊oHj
+    // メッシュ・テクスチャ・描画（単一メッシュの旧実装）
     FbxMesh     mesh_;
 
-    // m[h/bVpiStep1ł͕ێ̂݁B͕ςȂj
-    // Debug: draw only one sub-mesh in mesh_group_ (-1 = all)
-    int debug_draw_mesh_index_ = -1;
-
+    // ノード/メッシュ配列（マルチメッシュ対応用）
     FbxMeshGroup mesh_group_;
-    // Step2: cache init
-    const ufbx_anim* last_anim_ = nullptr;
-    double last_time_sec_ = -1.0;
-    bool pose_dirty_ = true;
-
 };

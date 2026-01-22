@@ -125,10 +125,6 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <Text Include="Engine\README.txt" />
-    <Text Include="src\README.txt" />
-  </ItemGroup>
-  <ItemGroup>
     <ClInclude Include="Engine\BoundingVolume.h" />
     <ClInclude Include="Engine\Camera.h" />
     <ClInclude Include="Engine\component.h" />

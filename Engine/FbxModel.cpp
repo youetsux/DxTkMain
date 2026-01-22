@@ -31,87 +31,19 @@ FbxModel::~FbxModel()
 //============================================================
 void FbxModel::Reset()
 {
-    // scene ̉
+    // scene の解放
     scene_.reset(nullptr);
 
-    //  Rs[/[uɗ炸ujč\zv
-    //    iFbxMesh Rs[sȂ߁j
+    // ※ コピー/ムーブ禁止に関わらず「破棄→再構築」
+    //   （FbxMesh はコピー不可なため）
     skeleton_.~FbxSkeleton();
     new (&skeleton_) FbxSkeleton();
 
     mesh_.~FbxMesh();
     new (&mesh_) FbxMesh();
 
-    // Step1/2/3: O[vc[cȂ
+    // マルチメッシュグループもクリア
     mesh_group_.Clear();
-    // Step2: cache init
-    last_anim_ = nullptr;
-    last_time_sec_ = -1.0;
-    pose_dirty_ = true;
-}
-
-//============================================================
-// SceneRadius
-//============================================================
-float FbxModel::SceneRadius()
-{
-    return skeleton_.SceneRadius();
-}
-
-//============================================================
-// SceneHeight
-//============================================================
-float FbxModel::SceneHeight()
-{
-    return MeasureSize(SizeMeasureAxis::HeightY);
-}
-
-//============================================================
-// MeasureSize
-//============================================================
-float FbxModel::MeasureSize(SizeMeasureAxis axis)
-{
-    const BVolume& bv = mesh_.GetBV();
-
-    float sx = (bv.max.x - bv.min.x);
-    float sy = (bv.max.y - bv.min.y);
-    float sz = (bv.max.z - bv.min.z);
-
-    switch (axis)
-    {
-    case SizeMeasureAxis::WidthX:   return sx;
-    case SizeMeasureAxis::HeightY:  return sy;
-    case SizeMeasureAxis::DepthZ:   return sz;
-    case SizeMeasureAxis::MaxExtent:
-        return std::max(sx, std::max(sy, sz));
-    case SizeMeasureAxis::Radius:
-    default:
-        return bv.radius;
-    }
-}
-
-//============================================================
-// MeasureSkinnedHeightY
-//============================================================
-float FbxModel::MeasureSkinnedHeightY()
-{
-    const auto& md = mesh_.Data();
-
-    // XLjOʒ_LȂ炻g
-    if (!md.skinned_vertices_.empty() && !md.influences_.empty() && !md.bind_vertices_.empty())
-    {
-        float minY = FLT_MAX;
-        float maxY = -FLT_MAX;
-
-        for (const auto& v : md.skinned_vertices_) {
-            minY = std::min(minY, v.pos.y);
-            maxY = std::max(maxY, v.pos.y);
-        }
-        return (maxY - minY);
-    }
-
-    // ܂XLjOʂi܂̓XLjȂ AABB 
-    return MeasureSize(SizeMeasureAxis::HeightY);
 }
 
 //============================================================
@@ -232,53 +164,29 @@ const ufbx_anim* FbxModel::GetDefaultAnim() const
 }
 
 //============================================================
-// UpdateSkeletonAtTimeiftHgAjj
+// UpdateSkeletonAtTime（デフォルトアニメ）
 //============================================================
 void FbxModel::UpdateSkeletonAtTime(double t_sec)
 {
     const ufbx_scene* scene = scene_.get();
     const ufbx_anim* anim = GetDefaultAnim();
-
-    // Step2: 同一 anim + 同一 timeSec なら skeleton 更新をスキップ
-    if (anim == last_anim_ && t_sec == last_time_sec_)
-    {
-        pose_dirty_ = false;
-        return;
-    }
-
-    last_anim_ = anim;
-    last_time_sec_ = t_sec;
-    pose_dirty_ = true;
-
     skeleton_.UpdateAtTime(scene, anim, t_sec);
 }
 
 
 //============================================================
-// UpdateSkeletonAtTimeiAjj
+// UpdateSkeletonAtTime（アニメ指定）
 //============================================================
 void FbxModel::UpdateSkeletonAtTime(const ufbx_anim* anim, double t_sec)
 {
     const ufbx_scene* scene = scene_.get();
-
-    // Step2: 同一 anim + 同一 timeSec なら skeleton 更新をスキップ
-    if (anim == last_anim_ && t_sec == last_time_sec_)
-    {
-        pose_dirty_ = false;
-        return;
-    }
-
-    last_anim_ = anim;
-    last_time_sec_ = t_sec;
-    pose_dirty_ = true;
-
     skeleton_.UpdateAtTime(scene, anim, t_sec);
 }
 
 
 //============================================================
-// DrawiCPU XLjO{`j
-//  Step3: group  group `
+// Draw（CPU スキニング＋描画）
+//  マルチメッシュがあればグループ描画
 //============================================================
 void FbxModel::Draw(
     const DirectX::XMMATRIX& world,
@@ -287,17 +195,7 @@ void FbxModel::Draw(
 {
     if (!mesh_group_.Empty())
     {
-        const int idx = debug_draw_mesh_index_;
-        if (idx >= 0 && idx < (int)mesh_group_.MeshCount())
-        {
-            // Step4: solo draw
-            mesh_group_.Meshes()[(size_t)idx]->Draw(world, view, proj, skeleton_);
-        }
-        else
-        {
-            // default: draw all
-            mesh_group_.Draw(world, view, proj, skeleton_);
-        }
+        mesh_group_.Draw(world, view, proj, skeleton_);
         return;
     }
 

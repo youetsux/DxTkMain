@@ -39,12 +39,6 @@
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
-    <Text Include="src\README.txt" />
-    <Text Include="Engine\README.txt">
-      <Filter>ソース ファイル\Engine\Fbx</Filter>
-    </Text>
-  </ItemGroup>
-  <ItemGroup>
     <ClInclude Include="TestScene.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
