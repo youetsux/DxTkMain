@@ -40,9 +40,6 @@ struct SkeletonData
     // 現在時刻 t におけるボーンのワールド行列（node_to_world(t)）
     std::vector<DirectX::XMFLOAT4X4> curr_world_;
 
-    // 1フレーム内でのノードワールド行列評価キャッシュ（UpdateAtTime() 用）
-    std::unordered_map<const ufbx_node*, DirectX::XMFLOAT4X4> node_world_cache_;
-
     // ufbx_node* からボーン番号（uint16_t）を引くための辞書
     std::unordered_map<const ufbx_node*, uint16_t> bone_index_of_;
 

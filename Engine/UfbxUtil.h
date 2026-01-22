@@ -8,6 +8,7 @@
 
 
 
+
 namespace UfbxUtil
 {
     namespace fs = std::filesystem;
@@ -35,23 +36,18 @@ namespace UfbxUtil
         const ufbx_mesh* mesh,
         const ufbx_string& uv_set_name);
 
+    // texture helpers
+    const ufbx_texture* GetDiffuseTexture(const ufbx_material* mat);
+
     // matrix / vector helpers
     DirectX::XMFLOAT4X4 ToXMMatrix(const ufbx_matrix& m);
 
     XMVECTOR TransformPosition(const XMFLOAT3& p, const XMMATRIX& M);
     XMVECTOR TransformNormal(const XMFLOAT3& n, const XMMATRIX& M);
 
+    // XMFLOAT4X4 çsóÒÇ≈ 3D ì_Çïœä∑ÇµÇƒï‘Ç∑
     DirectX::XMFLOAT3 TransformPoint(
         const DirectX::XMFLOAT4X4& M,
         const DirectX::XMFLOAT3& v);
 
-    DirectX::XMFLOAT4X4 EvaluateNodeWorldRecursive(
-        const ufbx_node* node,
-        const ufbx_anim* anim,
-        double           t,
-        std::unordered_map<const ufbx_node*, DirectX::XMFLOAT4X4>& cache);
-
-    const ufbx_texture* GetDiffuseTexture(const ufbx_material* mat);
-
-
-}
+} // namespace UfbxUtil

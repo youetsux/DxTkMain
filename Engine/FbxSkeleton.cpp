@@ -180,11 +180,6 @@ void FbxSkeleton::UpdateAtTime(const ufbx_scene* scene, const ufbx_anim* anim, d
     if (!scene || !anim) return;
     if (data_.bones_.empty()) return;
 
-#if defined(_DEBUG)
-    using clock = std::chrono::high_resolution_clock;
-    const auto t0 = clock::now();
-#endif
-
     // t をアニメーション時間の範囲にクランプ
     double t = t_sec;
     if (anim->time_end > anim->time_begin)
@@ -193,196 +188,33 @@ void FbxSkeleton::UpdateAtTime(const ufbx_scene* scene, const ufbx_anim* anim, d
         if (t > anim->time_end)   t = anim->time_end;
     }
 
-#if defined(_DEBUG)
-    const auto t1 = clock::now();
-#endif
-
-    // 計算済みノードの結果を溜めるキャッシュ（フォールバック用）
-    auto& cache = data_.node_world_cache_;
-    cache.clear();
-    if (cache.bucket_count() < data_.bones_.size() * 2)
-    {
-        cache.reserve(data_.bones_.size() * 2); // rehash 回避（挙動不変）
-    }
-
-    // ufbx 側でシーン全体を評価（ノードの node_to_world を更新したシーンを得る）
-    // 失敗時は従来の EvaluateNodeWorldRecursive() にフォールバックする
+    // シーン全体を評価（ノードの node_to_world を更新したシーンを得る）
     ufbx_error error = {};
     ufbx_scene* eval_scene = ufbx_evaluate_scene(scene, anim, t, nullptr, &error);
-
-#if defined(_DEBUG)
-    const auto t2 = clock::now();
-#endif
+    if (!eval_scene) return; // 失敗したら何もしない（稀にある）
 
     const size_t bone_count = data_.bones_.size();
-
-    // まず容量だけ確保して、再確保スパイクを抑える（挙動不変）
-    if (data_.curr_world_.capacity() < bone_count)
-    {
-        data_.curr_world_.reserve(bone_count);
-    }
-
-    // size を揃える（必要なときだけ）
     if (data_.curr_world_.size() != bone_count)
     {
         data_.curr_world_.resize(bone_count);
     }
 
-#if defined(_DEBUG)
-    const auto t3 = clock::now();
-    double max_bone_ms = 0.0;
-    size_t max_bone_i = 0;
-#endif
-
-    if (eval_scene)
+    // 評価されたシーンから node_to_world をコピー
+    for (size_t i = 0; i < bone_count; ++i)
     {
-        // eval_scene のノード配列は typed_id で参照できる
-        // node_to_world をそのままコピーする（親継承/インヘリット等は ufbx が反映済み）
-        for (size_t i = 0; i < bone_count; ++i)
-        {
-            const ufbx_node* node = data_.bones_[i].node;
-            if (!node) continue;
+        const ufbx_node* node = data_.bones_[i].node;
+        if (!node) continue;
 
-            const uint32_t node_index = node->typed_id;
-            if (node_index >= eval_scene->nodes.count) continue;
+        const uint32_t node_index = node->typed_id;
+        if (node_index >= eval_scene->nodes.count) continue;
 
-            const ufbx_node* eval_node = eval_scene->nodes.data[node_index];
-            if (!eval_node) continue;
+        const ufbx_node* eval_node = eval_scene->nodes.data[node_index];
+        if (!eval_node) continue;
 
-#if defined(_DEBUG)
-            const auto tb0 = clock::now();
-#endif
-
-            data_.curr_world_[i] = UfbxUtil::ToXMMatrix(eval_node->node_to_world);
-
-#if defined(_DEBUG)
-            const auto tb1 = clock::now();
-            const double bone_ms = std::chrono::duration<double, std::milli>(tb1 - tb0).count();
-            if (bone_ms > max_bone_ms)
-            {
-                max_bone_ms = bone_ms;
-                max_bone_i = i;
-            }
-#endif
-        }
-
-        ufbx_free_scene(eval_scene);
-        eval_scene = nullptr;
-    }
-    else
-    {
-        // ルート(親なし)を先に評価してキャッシュを温める
-        for (size_t i = 0; i < bone_count; ++i)
-        {
-            const BoneInfo& b = data_.bones_[i];
-            if (b.parent != -1) continue;
-
-            const ufbx_node* node = b.node;
-            if (!node) continue;
-
-#if defined(_DEBUG)
-            const auto tb0 = clock::now();
-#endif
-
-            data_.curr_world_[i] = UfbxUtil::EvaluateNodeWorldRecursive(node, anim, t, cache);
-
-#if defined(_DEBUG)
-            const auto tb1 = clock::now();
-            const double bone_ms = std::chrono::duration<double, std::milli>(tb1 - tb0).count();
-            if (bone_ms > max_bone_ms)
-            {
-                max_bone_ms = bone_ms;
-                max_bone_i = i;
-            }
-#endif
-        }
-
-        // 残りを評価
-        for (size_t i = 0; i < bone_count; ++i)
-        {
-            const BoneInfo& b = data_.bones_[i];
-            if (b.parent == -1) continue;
-
-            const ufbx_node* node = b.node;
-            if (!node) continue;
-
-#if defined(_DEBUG)
-            const auto tb0 = clock::now();
-#endif
-
-            data_.curr_world_[i] = UfbxUtil::EvaluateNodeWorldRecursive(node, anim, t, cache);
-
-#if defined(_DEBUG)
-            const auto tb1 = clock::now();
-            const double bone_ms = std::chrono::duration<double, std::milli>(tb1 - tb0).count();
-            if (bone_ms > max_bone_ms)
-            {
-                max_bone_ms = bone_ms;
-                max_bone_i = i;
-            }
-#endif
-        }
+        data_.curr_world_[i] = UfbxUtil::ToXMMatrix(eval_node->node_to_world);
     }
 
-#if defined(_DEBUG)
-    const auto t4 = clock::now();
-
-    const double ms_total = std::chrono::duration<double, std::milli>(t4 - t0).count();
-    const double ms_clamp = std::chrono::duration<double, std::milli>(t1 - t0).count();
-    const double ms_cache = std::chrono::duration<double, std::milli>(t2 - t1).count();
-    const double ms_resize = std::chrono::duration<double, std::milli>(t3 - t2).count();
-    const double ms_loop = std::chrono::duration<double, std::milli>(t4 - t3).count();
-
-    static int s_count = 0;
-    static double s_sum = 0.0;
-    static double s_max = 0.0;
-    static double s_max_cache = 0.0;
-    static double s_max_resize = 0.0;
-    static double s_max_loop = 0.0;
-    static double s_max_bone = 0.0;
-    static size_t s_max_bone_i = 0;
-
-    ++s_count;
-    s_sum += ms_total;
-    s_max = std::max(s_max, ms_total);
-    s_max_cache = std::max(s_max_cache, ms_cache);
-    s_max_resize = std::max(s_max_resize, ms_resize);
-    s_max_loop = std::max(s_max_loop, ms_loop);
-
-    if (max_bone_ms > s_max_bone)
-    {
-        s_max_bone = max_bone_ms;
-        s_max_bone_i = max_bone_i;
-    }
-
-    if ((s_count % 60) == 0)
-    {
-        const double avg = s_sum / 60.0;
-
-        std::ostringstream oss;
-        oss << "[Anim] UpdateAtTime bones=" << data_.bones_.size()
-            << " cache=" << cache.size()
-            << " avg_ms=" << avg
-            << " max_ms=" << s_max
-            << " max_cache_ms=" << s_max_cache
-            << " max_resize_ms=" << s_max_resize
-            << " max_loop_ms=" << s_max_loop
-            << " max_bone_ms=" << s_max_bone
-            << " max_bone_i=" << s_max_bone_i
-            << "\n";
-
-        const std::string s = oss.str();
-        OutputDebugStringA(s.c_str());
-
-        s_sum = 0.0;
-        s_max = 0.0;
-        s_max_cache = 0.0;
-        s_max_resize = 0.0;
-        s_max_loop = 0.0;
-        s_max_bone = 0.0;
-        s_max_bone_i = 0;
-    }
-#endif
+    ufbx_free_scene(eval_scene);
 }
 
 
