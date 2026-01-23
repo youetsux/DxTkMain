@@ -26,21 +26,21 @@ void TestScene::Initialize()
     actor_ = new GameObject(&Root(), "Actor");
     auto mc = new ModelComponent(actor_, "Assets/BoyJump.fbx", 1.0f);
 
-    // ���f���i�K�v�ɉ����ăp�X�E���K�������𒲐��j
+    // モデル（必要に応じてパス・正規化高さを調整）
     actor_->AddComponent(mc);
 
-    // �����ʒu mc_
+    // 初期位置 mc_
     actor_->GetTransform().position_ = { 0.0f, 0.5f, 0.0f };
     actor_->GetTransform().scale_ = { 1.0f, 1.0f, 1.0f };
     mc->SetAnimStack(0);
     mc->SetAnimRange(0, 92, 1.0f);
     mc->SetLoop(true);
 
-    //2�̖�
+    //2体目
     actor2_ = new GameObject(&Root(), "Actor2");
     auto mc2 = new ModelComponent(actor2_, "Assets/TriAvater.fbx");
 
-    // ���f���i�K�v�ɉ����ăp�X�E���K�������𒲐��j
+    // モデル（必要に応じてパス・正規化高さを調整）
     actor2_->AddComponent(mc2);
     mc2->SetRootScale(0.0001f);
     //mc2->SetRootRotationYawPitchRoll(0, DirectX::XMConvertToRadians( - 90.0f), 0);
@@ -48,22 +48,22 @@ void TestScene::Initialize()
     mc2->SetAnimStack(0);
     mc2->SetAnimRange(0, 39, 1.0f);
     mc2->SetLoop(true);
-    // �����ʒu mc_
+    // 初期位置 mc_
     actor2_->GetTransform().position_ = { 2.0f, 0.0f, 0.0f };
-    //actor2_->GetTransform().rotate_ = { -90.0f, 0.0f, 0.0f };//blender�̃��f������90�x�Q�Ă�
+    //actor2_->GetTransform().rotate_ = { -90.0f, 0.0f, 0.0f };//blenderのモデルだけ90度寝てる
     actor2_->GetTransform().scale_ = { 1.0f, 1.0f, 1.0f };
 
 
-    //3�̖�
+    //3体目
     actor3_ = new GameObject(&Root(), "Actor3");
     auto mc3 = new ModelComponent(actor3_, "Assets/SillyDancing.fbx", 1.0);
 
-    // ���f���i�K�v�ɉ����ăp�X�E���K�������𒲐��j
+    // モデル（必要に応じてパス・正規化高さを調整）
     actor3_->AddComponent(mc3);
     mc3->SetAnimStack(1);
     mc3->SetAnimRange(0, 229, 1.0f);
     mc3->SetLoop(true);
-    // �����ʒu mc_
+    // 初期位置 mc_
     actor3_->GetTransform().position_ = { -1.0f, 0.0f, 0.0f };
     actor3_->GetTransform().scale_ = { 1.0f, 1.0f, 1.0f };
 
@@ -76,7 +76,7 @@ void TestScene::Update()
    
     const float dt = (float)EngineTime::DeltaTime();
 
-    // --- ���͂ō��E�ɓ������i�Ǐ]��������₷���̂ňꏏ�Ɂj ---
+    // --- 入力で左右に動かす（追従が分かりやすいので一緒に） ---
     if (Input::IsKey(VK_LEFT))
     {
         actor_->GetTransform().position_.x -= 1.0f * dt;
@@ -87,18 +87,18 @@ void TestScene::Update()
     }
 
 
-    // --- �Ǐ]�J�����i�ŏ��j ---
-    // �Ǐ]�Ώۂ̍��W
+    // --- 追従カメラ（最小） ---
+    // 追従対象の座標
     const auto& t = actor_->GetTransform();
 
-    // �u����5�v�u���2�v���猩��
+    // 「後ろに5」「上に2」から見る
     DirectX::XMFLOAT3 eye{
         t.position_.x,
         t.position_.y + 2.0f,
         t.position_.z - 5.0f
     };
 
-    // ������𒍎�
+    // 少し上を注視
     DirectX::XMFLOAT3 at{
         t.position_.x,
         t.position_.y+1,
