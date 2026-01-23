@@ -1,4 +1,4 @@
-﻿// Main.cpp  (方針A：可変dtに統一 / Updateは1回/フレーム)
+// Main.cpp  (方針A：可変dtに統一 / Updateは1回/フレーム)
 // - EngineTime::Tick(elapsed) は 1回/フレーム
 // - g_app.Update() も 1回/フレーム
 // - Input::ProcessMessage は WndProc で維持
@@ -70,7 +70,6 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
     LARGE_INTEGER freq;
     QueryPerformanceFrequency(&freq);
 
-    // Render の目標間隔（ペーシング用）。dt は可変のまま（elapsed を Tick する）
     const double targetDt = 1.0 / 60.0;
     const double spinThreshold = 0.003;
 
@@ -82,14 +81,22 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
     // FPS 表示変数
     double fpsTimeAccum = 0.0;
     int    fpsFrames = 0;
-    const double fpsUpdateInterval = 1.0;   // 1秒ごとの平均FPS
+    const double fpsUpdateInterval = 1.0;
     wchar_t titleBuf[256];
     const wchar_t* baseTitle = L"MyApp";
+    
+    // FPS計測用：フレーム全体の開始時刻
+    double frameStartTime = prevTime;
 
     MSG msg{};
     bool run = true;
     while (run)
     {
+        // ★ フレーム開始時刻を記録（FPS計測用）
+        LARGE_INTEGER frameStartCnt; 
+        QueryPerformanceCounter(&frameStartCnt);
+        frameStartTime = double(frameStartCnt.QuadPart) / double(freq.QuadPart);
+
         // メッセージ処理
         while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
             if (msg.message == WM_QUIT) { run = false; break; }
@@ -100,16 +107,12 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
         // 時刻更新（実測フレーム時間）
         LARGE_INTEGER nowCnt; QueryPerformanceCounter(&nowCnt);
         double now = double(nowCnt.QuadPart) / double(freq.QuadPart);
-        double elapsed = now - prevTime;      // ★実測dt（可変）
+        double elapsed = now - prevTime;
         prevTime = now;
 
-        // ★ EngineTime は可変dtで更新（1フレームに1回だけ）
         EngineTime::Tick(elapsed);
-
-        // ★ Update は 1フレームに1回だけ（可変dt前提）
         g_app.Update();
 
-        // 次の描画時刻を計算（ペーシングは維持：dt自体は Tick 済みなので変えない）
         double nextRenderTime = lastRenderTime + targetDt;
         if (now < nextRenderTime) {
             SleepUntil(nextRenderTime, spinThreshold, freq);
@@ -117,20 +120,22 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
             now = double(nowCnt.QuadPart) / double(freq.QuadPart);
         }
 
-        // 描画
         g_app.Render();
 
-        // 実描画時刻を記録
         LARGE_INTEGER afterCnt; QueryPerformanceCounter(&afterCnt);
         lastRenderTime = double(afterCnt.QuadPart) / double(freq.QuadPart);
 
-        // FPS計測：実測elapsedで1秒ごとの平均FPSを出す
+        // ★ FPS計測：フレーム全体の実時間で計算
+        double frameEndTime = lastRenderTime;
+        double actualFrameTime = frameEndTime - frameStartTime;
+        
         fpsFrames++;
-        fpsTimeAccum += elapsed;
+        fpsTimeAccum += actualFrameTime;
 
         if (fpsTimeAccum >= fpsUpdateInterval) {
             double fps = double(fpsFrames) / fpsTimeAccum;
-            swprintf_s(titleBuf, _countof(titleBuf), L"%s - FPS: %.1f", baseTitle, fps);
+            swprintf_s(titleBuf, _countof(titleBuf), L"%s - FPS: %.1f (%.2fms)", 
+                       baseTitle, fps, (fpsTimeAccum / fpsFrames) * 1000.0);
             SetWindowTextW(hwnd, titleBuf);
 
             fpsTimeAccum = 0.0;
